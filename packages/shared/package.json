@@ -1,0 +1,22 @@
+{
+  "name": "@fin-rag/shared",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.4.5"
+  }
+}

@@ -7,7 +7,7 @@ module.exports = {
   },
   parser: '@typescript-eslint/parser',
   parserOptions: {
-    project: ['./tsconfig.base.json'],
+    project: ['./tsconfig.eslint.json'],
     tsconfigRootDir: __dirname,
     sourceType: 'module',
   },
@@ -28,10 +28,10 @@ module.exports = {
       version: 'detect',
     },
     'import/resolver': {
-      typescript: {
-        project: './tsconfig.base.json',
-      },
-    },
+      node: {
+        extensions: ['.ts', '.tsx', '.js', '.jsx']
+      }
+    }
   },
   rules: {
     'import/order': [
