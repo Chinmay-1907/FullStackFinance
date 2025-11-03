@@ -12,8 +12,17 @@ export const ProviderSchema = z.object({
   models: z.array(ProviderModelSchema).min(1),
 });
 
+export const ConfigModelsDefaultsSchema = z.object({
+  provider: z.string().min(1),
+  model: z.string().min(1),
+  embeddingModel: z.string().min(1),
+});
+
+export type ConfigModelsDefaults = z.infer<typeof ConfigModelsDefaultsSchema>;
+
 export const ConfigModelsResponseSchema = z.object({
   providers: z.array(ProviderSchema).min(1),
+  defaults: ConfigModelsDefaultsSchema,
 });
 
 export type ConfigModelsResponse = z.infer<typeof ConfigModelsResponseSchema>;

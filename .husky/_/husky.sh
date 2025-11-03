@@ -1,9 +1,6 @@
-echo "husky - DEPRECATED
-
-Please remove the following two lines from $0:
-
-#!/usr/bin/env sh
-. \"\$(dirname -- \"\$0\")/_/husky.sh\"
-
-They WILL FAIL in v10.0.0
-"
+#!/bin/sh
+# Minimal Husky helper script to ensure required tooling exists.
+command -v pnpm >/dev/null 2>&1 || {
+  echo "pnpm is required to run Husky hooks." >&2
+  exit 1
+}

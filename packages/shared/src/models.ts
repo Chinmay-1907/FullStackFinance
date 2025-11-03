@@ -47,7 +47,18 @@ export type ProviderKey = keyof typeof SupportedModels;
 
 export const DEFAULT_PROVIDER: ProviderKey = "groq";
 
-export const DEFAULT_MODEL = SupportedModels[DEFAULT_PROVIDER].models[0].id;
+type ProviderModel = (typeof SupportedModels)[ProviderKey]["models"][number];
+
+const findModelByType = (models: ReadonlyArray<ProviderModel>, type: ProviderModel["type"]) =>
+  models.find((model) => model.type === type)?.id;
+
+export const DEFAULT_MODEL =
+  findModelByType(SupportedModels[DEFAULT_PROVIDER].models, "llm") ??
+  SupportedModels[DEFAULT_PROVIDER].models[0].id;
+
+export const DEFAULT_EMBEDDING_MODEL =
+  findModelByType(SupportedModels[DEFAULT_PROVIDER].models, "embedding") ??
+  SupportedModels[DEFAULT_PROVIDER].models[0].id;
 
 export const RAGDefaults = {
   chunkSize: 1200,
