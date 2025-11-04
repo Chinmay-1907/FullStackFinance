@@ -1,7 +1,9 @@
+import type { ErrorEnvelope } from "@fin-rag/shared";
 import cors from "cors";
-import express, { type Express } from "express";
+import express, { type ErrorRequestHandler, type Express } from "express";
 import type { LevelWithSilent, Logger } from "pino";
 import pinoHttp from "pino-http";
+import { ZodError } from "zod";
 
 import { configRouter } from "./modules/config/config.routes";
 import { logger } from "./utils/logger";
@@ -29,10 +31,35 @@ app.use(
 );
 
 app.get("/healthz", (_req, res) => {
-  res.status(200).send({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-  });
+  res.status(200).send({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 app.use("/api/v1/config", configRouter);
+
+const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  void _next;
+
+  if (err instanceof ZodError) {
+    const response: ErrorEnvelope = {
+      code: "VALIDATION_ERROR",
+      message: "Invalid request payload",
+      details: err.flatten(),
+      status: 400,
+    };
+
+    res.status(400).json(response);
+    return;
+  }
+
+  logger.error({ err }, "Unhandled application error");
+
+  const response: ErrorEnvelope = {
+    code: "INTERNAL_ERROR",
+    message: "An unexpected error occurred",
+    status: 500,
+  };
+
+  res.status(500).json(response);
+};
+
+app.use(errorHandler);

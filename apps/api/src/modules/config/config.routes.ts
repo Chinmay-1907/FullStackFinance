@@ -7,30 +7,20 @@ import {
   DEFAULT_PROVIDER,
   SupportedModels,
 } from "@fin-rag/shared";
-import type { ConfigModelsResponse } from "@fin-rag/shared";
-import { Router } from "express";
-import type { Router as ExpressRouter } from "express";
+import { Router, type Router as ExpressRouter } from "express";
 
-type ProviderDescriptor = (typeof SupportedModels)[keyof typeof SupportedModels];
-type ProviderModel = ProviderDescriptor["models"][number];
-
-const mapProviders = (): ConfigModelsResponse["providers"] =>
-  (Object.values(SupportedModels) as ProviderDescriptor[]).map(({ provider, label, models }) => ({
-    provider,
-    label,
-    models: models.map((model: ProviderModel) => ({
-      id: model.id,
-      name: model.name,
-      type: model.type,
-    })),
-  }));
+import { getEnvConfig } from "./config.service";
 
 export const configRouter: ExpressRouter = Router();
 
 configRouter.get("/models", (_req, res, next) => {
   try {
     const response = ConfigModelsResponseSchema.parse({
-      providers: mapProviders(),
+      providers: Object.values(SupportedModels).map((provider) => ({
+        provider: provider.provider,
+        label: provider.label,
+        models: provider.models,
+      })),
       defaults: {
         provider: DEFAULT_PROVIDER,
         model: DEFAULT_MODEL,
@@ -48,17 +38,27 @@ configRouter.post("/validate", (req, res, next) => {
   try {
     const payload = ConfigValidateRequestSchema.parse(req.body ?? {});
 
-    const requiredKeys: Array<{ envKey: string; provided?: string }> = [
+    const envConfig = getEnvConfig();
+    const envLookup: Record<string, string | undefined> = {
+      GROQ_API_KEY: envConfig.credentials.groq,
+      GEMINI_API_KEY: envConfig.credentials.gemini,
+      TAVILY_API_KEY: envConfig.credentials.tavily,
+      SEC_EMAIL: envConfig.credentials.secEmail,
+    };
+
+    const requiredKeys: Array<{ envKey: keyof typeof envLookup; provided?: string }> = [
       { envKey: "GROQ_API_KEY", provided: payload.groqKey },
       { envKey: "GEMINI_API_KEY", provided: payload.geminiKey },
       { envKey: "TAVILY_API_KEY", provided: payload.tavilyKey },
       { envKey: "SEC_EMAIL", provided: payload.secEmail },
     ];
 
+    const isEmpty = (value?: string | null) => !value || value.trim().length === 0;
+
     const missing = requiredKeys
       .filter(({ envKey, provided }) => {
-        const value = provided ?? process.env[envKey];
-        return value === undefined || value === null || `${value}`.trim().length === 0;
+        const resolved = provided ?? envLookup[envKey];
+        return isEmpty(resolved);
       })
       .map(({ envKey }) => envKey);
 

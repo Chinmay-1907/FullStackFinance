@@ -1,21 +1,58 @@
 import "dotenv/config";
 
+import type { Server } from "http";
+
 import { app } from "./app";
+import { connectDB, disconnectDB } from "./db/connection";
+import { getEnvConfig } from "./modules/config/config.service";
 import { logger } from "./utils/logger";
 
-const port = Number(process.env["PORT"] ?? 3001);
+const start = async () => {
+  try {
+    const { port } = getEnvConfig();
+    await connectDB();
 
-const server = app.listen(port, () => {
-  logger.info({ port }, "API server listening");
-});
+    const server = app.listen(port, () => {
+      logger.info({ port }, "API server listening");
+    });
 
-const shutdown = (signal: NodeJS.Signals) => {
-  logger.info({ signal }, "Shutting down API server");
-  server.close(() => {
-    logger.info("HTTP server closed");
-    process.exit(0);
+    registerShutdown(server);
+  } catch (error) {
+    logger.error({ err: error }, "Failed to start API server");
+    process.exit(1);
+  }
+};
+
+const registerShutdown = (server: Server) => {
+  const shutdown = async (signal: NodeJS.Signals) => {
+    logger.info({ signal }, "Shutting down API server");
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve();
+        });
+      });
+
+      await disconnectDB();
+      logger.info("Shutdown complete");
+      process.exit(0);
+    } catch (shutdownError) {
+      logger.error({ err: shutdownError }, "Error during shutdown");
+      process.exit(1);
+    }
+  };
+
+  process.once("SIGINT", (signal) => {
+    void shutdown(signal);
+  });
+  process.once("SIGTERM", (signal) => {
+    void shutdown(signal);
   });
 };
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+void start();
