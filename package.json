@@ -1,0 +1,35 @@
+{
+  "name": "fullstack-finance",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo for the Financial RAG system (API, web, shared packages).",
+  "license": "MIT",
+  "packageManager": "pnpm@8.15.4",
+  "engines": {
+    "node": ">=18.18.0",
+    "pnpm": ">=8.15.0"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --workspace-root=false dev",
+    "build": "pnpm -r --workspace-root=false build",
+    "lint": "pnpm -r --workspace-root=false lint",
+    "test": "pnpm -r --workspace-root=false test",
+    "typecheck": "pnpm -r --workspace-root=false typecheck",
+    "format": "prettier --write .",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.12.0",
+    "@typescript-eslint/parser": "^7.12.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-jsx-a11y": "^6.8.0",
+    "eslint-plugin-react": "^7.34.1",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  }
+}
