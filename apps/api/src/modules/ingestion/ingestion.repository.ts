@@ -10,9 +10,11 @@ import { Types } from "mongoose";
 import {
   DocumentModel,
   type DocumentMetadata,
+  INGESTION_STAGE_SEQUENCE,
   IngestionJobModel,
   type IngestionJobDocument,
   type IngestionJobStatus,
+  type IngestionStageName,
   type StageErrorMetadata,
   type VectorManifestMetadata,
   VectorManifestModel,
@@ -46,13 +48,13 @@ const getCurrentStageName = (job: IngestionJobDocument) => {
     return running.name;
   }
 
-  const pending = job.stages.find((stage) => stage.status === "pending");
-  if (pending) {
-    return pending.name;
+  const failed = job.stages.find((stage) => stage.status === "failed");
+  if (failed) {
+    return failed.name;
   }
 
-  const failed = job.stages.find((stage) => stage.status === "failed");
-  return failed?.name ?? null;
+  const pending = job.stages.find((stage) => stage.status === "pending");
+  return pending?.name ?? null;
 };
 
 const toIngestionStatus = (job: IngestionJobDocument): IngestionStatus => {
@@ -102,14 +104,14 @@ export class IngestionRepository {
     return DocumentModel.findByHash(textHash);
   }
 
-  async seedJobStages(job: IngestionJobDocument, stages: string[]) {
+  async seedJobStages(job: IngestionJobDocument, stages: IngestionStageName[]) {
     stages.forEach((stageName) => {
       job.updateStage(stageName, { status: "pending", progress: 0 });
     });
     return job.save();
   }
 
-  async createJob(ticker: string, stages: string[] = []) {
+  async createJob(ticker: string, stages: IngestionStageName[] = [...INGESTION_STAGE_SEQUENCE]) {
     const job = await IngestionJobModel.create({
       ticker: normalizeTicker(ticker),
       status: stages.length ? "queued" : "queued",
@@ -144,17 +146,17 @@ export class IngestionRepository {
     return job;
   }
 
-  async markStageRunning(jobId: ObjectIdLike, stageName: string) {
+  async markStageRunning(jobId: ObjectIdLike, stageName: IngestionStageName) {
     const job = await this.mutateJob(jobId, (doc) => doc.markStageRunning(stageName));
     return job ? toIngestionStatus(job) : null;
   }
 
-  async markStageComplete(jobId: ObjectIdLike, stageName: string) {
+  async markStageComplete(jobId: ObjectIdLike, stageName: IngestionStageName) {
     const job = await this.mutateJob(jobId, (doc) => doc.markStageComplete(stageName));
     return job ? toIngestionStatus(job) : null;
   }
 
-  async failStage(jobId: ObjectIdLike, stageName: string, error: StageErrorMetadata) {
+  async failStage(jobId: ObjectIdLike, stageName: IngestionStageName, error: StageErrorMetadata) {
     const job = await this.mutateJob(jobId, (doc) => doc.failStage(stageName, error));
     return job ? toIngestionStatus(job) : null;
   }
@@ -171,6 +173,11 @@ export class IngestionRepository {
 
   async getLatestStatus(ticker: string) {
     const job = await this.getLatestJobForTicker(ticker);
+    return job ? toIngestionStatus(job) : null;
+  }
+
+  async prepareJobForRetry(jobId: ObjectIdLike) {
+    const job = await this.mutateJob(jobId, (doc) => doc.prepareForRetry());
     return job ? toIngestionStatus(job) : null;
   }
 

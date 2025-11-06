@@ -14,6 +14,22 @@ export const ChunkingConfig = {
   defaultOverlap: RAGDefaults.chunkOverlap,
 } as const;
 
+export interface QueueWorkerSettings {
+  concurrency: number;
+  maxStalledCount: number;
+}
+
+const WORKER_DEFAULTS: Record<"ingestion" | "embedding", QueueWorkerSettings> = {
+  ingestion: {
+    concurrency: 5,
+    maxStalledCount: 1,
+  },
+  embedding: {
+    concurrency: 8,
+    maxStalledCount: 1,
+  },
+};
+
 export const getRetryConfig = (overrides?: Partial<RetryConfig>): RetryConfig => {
   const base: RetryConfig = {
     maxAttempts: RetryDefaults.attempts,
@@ -29,3 +45,11 @@ export const getRetryConfig = (overrides?: Partial<RetryConfig>): RetryConfig =>
 };
 
 export const getSelectedVectorStore = () => getEnvConfig().vectorStore;
+
+export const getQueueWorkerSettings = (
+  queue: keyof typeof WORKER_DEFAULTS,
+  overrides?: Partial<QueueWorkerSettings>,
+): QueueWorkerSettings => ({
+  ...WORKER_DEFAULTS[queue],
+  ...overrides,
+});

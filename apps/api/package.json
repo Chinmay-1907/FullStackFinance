@@ -8,7 +8,9 @@
     "start": "node dist/index.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "worker:ingestion": "ts-node src/workers/ingestion.worker.ts",
+    "worker:embedding": "ts-node src/workers/embedding.worker.ts"
   },
   "dependencies": {
     "@fin-rag/shared": "workspace:*",
@@ -20,9 +22,11 @@
     "@opentelemetry/resources": "^1.9.0",
     "@opentelemetry/sdk-node": "^0.54.0",
     "@opentelemetry/semantic-conventions": "^1.23.0",
+    "bullmq": "^5.8.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "ioredis": "^5.4.1",
     "mongoose": "^8.6.0",
     "pino": "^9.4.0",
     "pino-http": "^11.0.0",

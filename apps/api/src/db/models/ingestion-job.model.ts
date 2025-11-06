@@ -1,6 +1,19 @@
 import { JobStageStatusSchema, type JobStageStatus } from "@fin-rag/shared";
 import { Schema, model, type HydratedDocument, type Model, type Types } from "mongoose";
 
+export const INGESTION_STAGE_SEQUENCE = [
+  "download",
+  "ocr",
+  "clean",
+  "chunk",
+  "embed",
+  "persist",
+] as const;
+
+export type IngestionStageName = (typeof INGESTION_STAGE_SEQUENCE)[number];
+
+const STAGE_ORDER = new Map(INGESTION_STAGE_SEQUENCE.map((name, index) => [name, index]));
+
 export type IngestionJobStatus = "queued" | "running" | "failed" | "completed";
 
 export interface StageErrorMetadata {
@@ -18,7 +31,7 @@ export interface StageStatusTimestamps {
 }
 
 export interface IngestionStageMetadata {
-  name: string;
+  name: IngestionStageName;
   status: JobStageStatus;
   progress: number;
   error?: StageErrorMetadata;
@@ -48,14 +61,19 @@ export type IngestionJobDocument = HydratedDocument<IngestionJobMetadata, Ingest
 
 export interface IngestionJobMethods {
   updateStage(
-    stageName: string,
+    stageName: IngestionStageName,
     updates: Partial<Omit<IngestionStageMetadata, "name">>,
   ): IngestionJobDocument;
-  markStageRunning(stageName: string): IngestionJobDocument;
-  markStageComplete(stageName: string): IngestionJobDocument;
-  failStage(stageName: string, error: StageErrorMetadata): IngestionJobDocument;
+  markStageRunning(stageName: IngestionStageName): IngestionJobDocument;
+  markStageComplete(stageName: IngestionStageName): IngestionJobDocument;
+  failStage(stageName: IngestionStageName, error: StageErrorMetadata): IngestionJobDocument;
   setStatus(status: IngestionJobStatus): IngestionJobDocument;
   recalculateProgress(): IngestionJobDocument;
+  getStage(stageName: IngestionStageName): IngestionStageDocument | undefined;
+  getNextPendingStage(): IngestionStageDocument | undefined;
+  getPendingStages(): IngestionStageDocument[];
+  getCompletedStages(): IngestionStageDocument[];
+  prepareForRetry(): IngestionJobDocument;
 }
 
 export interface IngestionJobModelStatics
@@ -85,7 +103,12 @@ const stageTimestampSchema = new Schema<StageStatusTimestamps>(
 
 const stageSchema = new Schema<IngestionStageMetadata>(
   {
-    name: { type: String, required: true, trim: true },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      enum: INGESTION_STAGE_SEQUENCE,
+    },
     status: {
       type: String,
       required: true,
@@ -182,7 +205,19 @@ const recalculateProgress = (job: IngestionJobDocument) => {
   job.progress = Math.min(1, Math.max(0, total / job.stages.length));
 };
 
+const sortStages = (job: IngestionJobDocument) => {
+  job.stages.sort((a, b) => {
+    const left = STAGE_ORDER.get(a.name) ?? Number.MAX_SAFE_INTEGER;
+    const right = STAGE_ORDER.get(b.name) ?? Number.MAX_SAFE_INTEGER;
+    return left - right;
+  });
+};
+
 ingestionJobSchema.methods.updateStage = function updateStage(stageName, updates) {
+  if (!STAGE_ORDER.has(stageName)) {
+    throw new Error(`Unknown ingestion stage: ${stageName}`);
+  }
+
   let stage = this.stages.find((item) => item.name === stageName);
 
   if (!stage) {
@@ -199,6 +234,7 @@ ingestionJobSchema.methods.updateStage = function updateStage(stageName, updates
     stage = this.stages.create(stagePayload);
     touchStageTimestamp(stage, status);
     this.stages.push(stage);
+    sortStages(this);
   } else {
     if (updates.status) {
       stage.status = updates.status;
@@ -212,6 +248,7 @@ ingestionJobSchema.methods.updateStage = function updateStage(stageName, updates
     }
     stage.statusTimestamps.updatedAt = new Date();
   }
+  sortStages(this);
 
   recalculateProgress(this);
   this.statusTimestamps.updatedAt = new Date();
@@ -250,6 +287,44 @@ ingestionJobSchema.methods.setStatus = function setStatus(status) {
 
 ingestionJobSchema.methods.recalculateProgress = function recalculate() {
   recalculateProgress(this);
+  return this;
+};
+
+ingestionJobSchema.methods.getStage = function getStage(stageName) {
+  return this.stages.find((stage) => stage.name === stageName);
+};
+
+ingestionJobSchema.methods.getPendingStages = function getPendingStages() {
+  return this.stages.filter((stage) => stage.status !== "completed");
+};
+
+ingestionJobSchema.methods.getCompletedStages = function getCompletedStages() {
+  return this.stages.filter((stage) => stage.status === "completed");
+};
+
+ingestionJobSchema.methods.getNextPendingStage = function getNextPendingStage() {
+  return this.stages.find((stage) => stage.status !== "completed");
+};
+
+ingestionJobSchema.methods.prepareForRetry = function prepareForRetry() {
+  this.stages.forEach((stage) => {
+    if (stage.status === "completed") {
+      stage.progress = 1;
+      stage.error = undefined;
+      return;
+    }
+
+    stage.status = "pending";
+    stage.progress = 0;
+    stage.error = undefined;
+    stage.statusTimestamps.runningAt = undefined;
+    stage.statusTimestamps.failedAt = undefined;
+    touchStageTimestamp(stage, "pending");
+  });
+
+  sortStages(this);
+  this.setStatus("queued");
+  this.recalculateProgress();
   return this;
 };
 

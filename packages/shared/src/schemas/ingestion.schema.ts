@@ -49,3 +49,33 @@ export const IngestionStatusSchema = z.object({
 });
 
 export type IngestionStatus = z.infer<typeof IngestionStatusSchema>;
+
+export const IngestionQueueJobSchema = z.object({
+  jobId: z.string().min(1),
+  ticker: z.string().min(1),
+  sources: z.array(IngestionSourceSchema).nonempty(),
+  retryCount: z.number().int().min(0).default(0),
+  requestedAt: z.string().datetime({ offset: true }).optional(),
+});
+
+export type IngestionQueueJob = z.infer<typeof IngestionQueueJobSchema>;
+
+export const EmbeddingQueueJobSchema = z.object({
+  jobId: z.string().min(1),
+  ticker: z.string().min(1),
+  documentIds: z.array(z.string().min(1)).nonempty(),
+  embeddingModel: z.string().min(1),
+  retryCount: z.number().int().min(0).default(0),
+});
+
+export type EmbeddingQueueJob = z.infer<typeof EmbeddingQueueJobSchema>;
+
+export const OcrQueueJobSchema = z.object({
+  jobId: z.string().min(1),
+  documentId: z.string().min(1),
+  sourcePath: z.string().min(1),
+  mimeType: z.string().min(1).optional(),
+  retryCount: z.number().int().min(0).default(0),
+});
+
+export type OcrQueueJob = z.infer<typeof OcrQueueJobSchema>;

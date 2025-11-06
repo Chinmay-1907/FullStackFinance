@@ -1,4 +1,4 @@
-import { type ZodSchema, ZodError } from "zod";
+import { type ZodType, type ZodTypeDef } from "zod";
 
 import { ValidationError } from "./errors";
 
@@ -8,16 +8,14 @@ interface ParseOptions {
 }
 
 export const parseWithSchema = <T>(
-  schema: ZodSchema<T>,
+  schema: ZodType<T, ZodTypeDef, unknown>,
   payload: unknown,
   options: ParseOptions = {},
 ) => {
-  try {
-    return schema.parse(payload);
-  } catch (error) {
-    if (error instanceof ZodError) {
-      throw ValidationError.fromZod(error, options.requestId);
-    }
-    throw error;
+  const result = schema.safeParse(payload);
+  if (!result.success) {
+    throw ValidationError.fromZod(result.error, options.requestId);
   }
+
+  return result.data;
 };
