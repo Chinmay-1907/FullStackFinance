@@ -1,9 +1,9 @@
-import { createDeadLetterQueue, createQueue, type AppQueue } from "./queue.factory";
+import { createDeadLetterQueue, createQueue } from "./queue.factory";
 import { QUEUE_NAMES, type QueueName } from "./queue.names";
 
-const registry = new Map<QueueName, AppQueue>();
+const registry = new Map<QueueName, ReturnType<typeof createQueue>>();
 
-const getOrCreateQueue = (name: QueueName, create: () => AppQueue) => {
+const getOrCreateQueue = (name: QueueName, create: () => ReturnType<typeof createQueue>) => {
   const existing = registry.get(name);
   if (existing) {
     return existing;

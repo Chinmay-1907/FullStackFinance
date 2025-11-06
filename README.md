@@ -1,6 +1,7 @@
 # FullStackFinance — Financial RAG System
 
 ## Table of Contents
+
 - [Executive Summary](#executive-summary)
 - [Architecture Overview](#architecture-overview)
   - [Workspace Layout](#workspace-layout)
@@ -18,9 +19,11 @@
 - [Assumptions & TODOs](#assumptions--todos)
 
 ## Executive Summary
+
 FullStackFinance is a full-stack MERN + TypeScript Retrieval-Augmented Generation (RAG) platform tailored for financial research. The system ingests finance content (SEC filings, earnings call transcripts, relevant news), processes and indexes it into a vector store, and delivers source-grounded answers to user queries via LLMs (Groq/Gemini). Observability, testing, and deployment tooling are treated as first-class citizens from the outset.
 
 Key objectives include:
+
 - Streamlined credential setup and validation for third-party providers (Groq, Gemini, Tavily, SEC email).
 - Resilient ingestion pipeline that fetches, cleans, chunks, embeds, and indexes documents.
 - Responsive React dashboard for setup, ingestion tracking, and querying with citations.
@@ -29,6 +32,7 @@ Key objectives include:
 ## Architecture Overview
 
 ### Workspace Layout
+
 ```
 root/
 ├── apps/
@@ -45,6 +49,7 @@ root/
 ```
 
 ### Data Flow
+
 1. **Setup:** User enters provider credentials in the web UI. The API validates and stores configuration (env-backed, never persisted in plaintext).
 2. **Ingestion:** User starts ingestion for one or more tickers. BullMQ workers orchestrate fetching SEC filings, transcripts, and news, applying OCR where needed.
 3. **Processing:** Text is cleaned, normalized, chunked, embedded, and written to a vector store (FAISS or Pinecone). Vector manifests are persisted in MongoDB.
@@ -53,51 +58,59 @@ root/
 
 ## Technology Stack
 
-| Layer          | Technology / Tooling                               | Notes |
-| -------------- | --------------------------------------------------- | ----- |
-| Frontend       | React (Vite), TypeScript, Tailwind CSS, React Query | Typed DTO consumption, streaming answers |
-| Backend        | Node.js, Fastify or Express, TypeScript             | Zod validation, modular services |
-| Persistence    | MongoDB (Mongoose), optional MinIO/S3               | Metadata & raw document storage |
-| Queues         | Redis + BullMQ                                      | Ingestion + embedding workers |
-| Vector Store   | FAISS (local) and Pinecone adapter                  | Vector manifests persisted in Mongo |
-| LLM Providers  | Groq, Google Gemini                                 | Embeddings + completions |
-| Retrieval      | LangChain.js                                        | Chunking, embedding pipelines |
-| Observability  | Pino logging, OpenTelemetry traces                  | Redacted secrets, structured logs |
-| Testing        | Jest, Supertest, React Testing Library, Playwright  | Unit, integration, and e2e coverage |
-| Tooling        | pnpm, Turborepo (optional), ESLint, Prettier, Husky | Strict TS, lint-staged |
-| Deployment     | Docker Compose, GitHub Actions CI                   | Builds, tests, linting, container orchestration |
+| Layer         | Technology / Tooling                                | Notes                                           |
+| ------------- | --------------------------------------------------- | ----------------------------------------------- |
+| Frontend      | React (Vite), TypeScript, Tailwind CSS, React Query | Typed DTO consumption, streaming answers        |
+| Backend       | Node.js, Fastify or Express, TypeScript             | Zod validation, modular services                |
+| Persistence   | MongoDB (Mongoose), optional MinIO/S3               | Metadata & raw document storage                 |
+| Queues        | Redis + BullMQ                                      | Ingestion + embedding workers                   |
+| Vector Store  | FAISS (local) and Pinecone adapter                  | Vector manifests persisted in Mongo             |
+| LLM Providers | Groq, Google Gemini                                 | Embeddings + completions                        |
+| Retrieval     | LangChain.js                                        | Chunking, embedding pipelines                   |
+| Observability | Pino logging, OpenTelemetry traces                  | Redacted secrets, structured logs               |
+| Testing       | Jest, Supertest, React Testing Library, Playwright  | Unit, integration, and e2e coverage             |
+| Tooling       | pnpm, Turborepo (optional), ESLint, Prettier, Husky | Strict TS, lint-staged                          |
+| Deployment    | Docker Compose, GitHub Actions CI                   | Builds, tests, linting, container orchestration |
 
 ## API Contract
+
 All endpoints accept/produce JSON, validated with Zod schemas shared via `@shared`. Authentication is not yet included.
 
 ### Configuration
-- `GET /config/models` → Lists supported providers/models and defaults.
-- `POST /config/validate` → Body: `{ groqKey?, geminiKey?, tavilyKey?, secEmail? }`
+
+- `GET /api/v1/config/models` – Lists supported providers/models and defaults.
+- `POST /api/v1/config/validate` – Body: `{ groqKey?, geminiKey?, tavilyKey?, secEmail? }`
   - Response: `{ ok: boolean; missing: string[] }`
   - Validates presence/format of credentials (no external verification yet).
 
 ### Ingestion
-- `POST /ingestion/start` → `{ ticker: string; sources?: ("sec"|"transcripts"|"news")[]; from?: string; to?: string }`
+
+- `POST /api/v1/ingestion/start` – `{ ticker: string; sources?: ("sec"|"transcripts"|"news")[]; from?: string; to?: string }`
   - Response: `{ jobId: string }`
   - Enqueues ingestion job with resumable stages.
-- `GET /ingestion/status/:jobId` → Returns job state, percentage complete, active stage, errors.
-- `POST /ingestion/retry/:jobId` → Requeues failed steps for the job.
+- `GET /api/v1/ingestion/status/:jobId` – Returns job state, percentage complete, active stage, errors.
+- `POST /api/v1/ingestion/retry/:jobId` – Requeues failed steps for the job.
 
 ### Vector Store
+
 - `POST /vector-store/rebuild` → Rebuild vector store for given ticker(s)/sources.
 - `GET /vector-store/manifest?ticker=AAPL` → Returns vector manifest & document counts.
 
 ### Query
+
 - `POST /query` → `{ ticker: string; question: string; k?: number; model?: string }`
   - Response: `{ answer: string; citations: { docId: string; snippet: string; url?: string; score: number }[] }`
   - Supports streaming responses; answer prompt enforces bullet points + synthesis paragraph with citations.
 
 ### Error Envelope
+
 - All error responses conform to `{ code: string; message: string; details?: unknown }`.
 - Common codes include `VALIDATION_ERROR`, `NOT_FOUND`, `INGESTION_FAILED`, `INTERNAL_ERROR`.
 
 ## Data Model
+
 MongoDB collections (indicative schemas):
+
 - **Tickers** — `{ symbol: string; name?: string; createdAt: Date }`
 - **Documents** — `{ ticker: string; sourceType: "sec"|"transcript"|"news"; url?: string; formType?: string; publishedAt?: Date; textPath: string; textHash: string; bytes?: number; createdAt: Date }`
   - Index `{ ticker, sourceType, publishedAt }`
@@ -107,12 +120,14 @@ MongoDB collections (indicative schemas):
 Raw document text and assets are stored either on disk (`/data/raw/<ticker>/<docId>.txt`) or in MinIO/S3 buckets (configurable).
 
 ## Non-Functional Requirements
+
 - **Reliability:** Resumable ingestion, idempotent vector writes, exponential backoff with jitter for network requests.
 - **Performance:** Streaming responses, caching embeddings, batching API calls.
 - **Security:** Secrets loaded via environment variables, redacted logs, CORS restricted to first-party web app.
 - **Observability:** Pino logs with structured metadata, OpenTelemetry traces for ingestion and query stages, health checks at `/healthz`.
 
 ## Build, Test, and Deploy Expectations
+
 - Development environment uses pnpm workspaces. Root scripts orchestrate commands across packages (`pnpm -r dev`, `pnpm -r test`, etc.).
 - `pnpm install` (or `pnpm i`) bootstraps dependencies across the monorepo.
 - `pnpm -w build` builds all packages and apps. `pnpm -w test` runs unit and integration suites.
@@ -121,6 +136,7 @@ Raw document text and assets are stored either on disk (`/data/raw/<ticker>/<doc
 - Observability stack (logs/traces) is configured during API bootstrap.
 
 ## Assumptions & TODOs
+
 - **TODO:** Choose between Fastify and Express for the API (defaulting to Fastify unless constraints arise).
 - **TODO:** Finalize OCR strategy (tesseract.js vs. external microservice). Document integration steps.
 - **TODO:** Implement Pinecone adapter details (API key loading, namespace strategy).

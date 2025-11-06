@@ -8,12 +8,6 @@ import { QUEUE_NAMES, type QueueName } from "./queue.names";
 
 const log = createModuleLogger("queue:factory");
 
-type QueueData = Record<string, unknown>;
-type QueueResult = Record<string, unknown>;
-
-export type AppQueue = Queue<QueueData, QueueResult, string>;
-export type AppQueueEvents = QueueEvents<QueueData, QueueResult, string>;
-
 const createDefaultJobOptions = () => {
   const retry = getRetryConfig();
 
@@ -28,8 +22,8 @@ const createDefaultJobOptions = () => {
   };
 };
 
-export const createQueue = (name: QueueName, options: Partial<QueueOptions> = {}): AppQueue =>
-  new Queue<QueueData, QueueResult, string>(name, {
+export const createQueue = (name: QueueName, options: Partial<QueueOptions> = {}) =>
+  new Queue(name, {
     connection: getRedisClient(),
     defaultJobOptions: {
       ...createDefaultJobOptions(),
@@ -38,8 +32,8 @@ export const createQueue = (name: QueueName, options: Partial<QueueOptions> = {}
     ...options,
   });
 
-export const createDeadLetterQueue = (name: QueueName): AppQueue =>
-  new Queue<QueueData, QueueResult, string>(name, {
+export const createDeadLetterQueue = (name: QueueName) =>
+  new Queue(name, {
     connection: getRedisClient(),
     defaultJobOptions: {
       removeOnComplete: 1000,
@@ -47,8 +41,8 @@ export const createDeadLetterQueue = (name: QueueName): AppQueue =>
     },
   });
 
-export const createQueueEvents = (name: QueueName): AppQueueEvents => {
-  const events = new QueueEvents<QueueData, QueueResult, string>(name, {
+export const createQueueEvents = (name: QueueName) => {
+  const events = new QueueEvents(name, {
     connection: getRedisClient(),
   });
 

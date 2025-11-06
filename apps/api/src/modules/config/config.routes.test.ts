@@ -1,8 +1,17 @@
 /* eslint-env jest */
-/* eslint-disable import/order, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable import/order, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
 
 import { ConfigModelsResponseSchema, ConfigValidateResponseSchema } from "@fin-rag/shared";
 import request from "supertest";
+
+jest.mock("../ingestion/ingestion.service", () => ({
+  IngestionService: jest.fn().mockImplementation(() => ({
+    startIngestion: jest.fn(),
+    getStatus: jest.fn(),
+    retryJob: jest.fn(),
+  })),
+}));
+
 import { app } from "../../app";
 import { resetEnvConfigCache } from "./config.service";
 

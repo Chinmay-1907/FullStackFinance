@@ -6,6 +6,7 @@ import type { LevelWithSilent, Logger } from "pino";
 import pinoHttp from "pino-http";
 
 import { configRouter } from "./modules/config/config.routes";
+import { ingestionRouter } from "./modules/ingestion/ingestion.routes";
 import { AppError, createErrorEnvelope, ValidationError } from "./utils/errors";
 import { logger } from "./utils/logger";
 
@@ -54,6 +55,7 @@ app.get("/healthz", (_req, res) => {
 });
 
 app.use("/api/v1/config", configRouter);
+app.use("/api/v1/ingestion", ingestionRouter);
 
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   void _next;
