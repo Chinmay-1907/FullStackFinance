@@ -24,6 +24,4 @@ const tickerSchema = new Schema<TickerDocument>(
   { timestamps: true },
 );
 
-tickerSchema.index({ symbol: 1 }, { unique: true });
-
 export const TickerModel = model<TickerDocument>("Ticker", tickerSchema);

@@ -54,5 +54,18 @@ module.exports = {
     ],
     'react/react-in-jsx-scope': 'off',
   },
+  overrides: [
+    {
+      files: ['**/*.test.ts', '**/*.test.tsx', '**/__tests__/**/*.ts', '**/__tests__/**/*.tsx'],
+      env: {
+        jest: true,
+      },
+      rules: {
+        '@typescript-eslint/no-unsafe-call': 'off',
+        '@typescript-eslint/no-unsafe-member-access': 'off',
+        '@typescript-eslint/no-unsafe-argument': 'off',
+      },
+    },
+  ],
   ignorePatterns: ['**/dist/**', '**/build/**', '**/*.js'],
 };

@@ -1,8 +1,9 @@
-import { logger } from "../../utils/logger";
+import { createModuleLogger } from "../../utils/logger";
 
 import { EnvSchema, type EnvConfig } from "./env.schema";
 
 let cachedConfig: EnvConfig | null = null;
+const log = createModuleLogger("config:service");
 
 const redactCredential = (value?: string | null) => (value ? "set" : "unset");
 
@@ -10,7 +11,7 @@ export const getEnvConfig = (): EnvConfig => {
   if (!cachedConfig) {
     cachedConfig = EnvSchema.parse(process.env);
 
-    logger.info(
+    log.info(
       {
         nodeEnv: cachedConfig.nodeEnv,
         vectorStore: cachedConfig.vectorStore,

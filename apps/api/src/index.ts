@@ -6,9 +6,14 @@ import { app } from "./app";
 import { connectDB, disconnectDB } from "./db/connection";
 import { getEnvConfig } from "./modules/config/config.service";
 import { logger } from "./utils/logger";
+import { initializeTracing, shutdownTracing } from "./utils/tracing";
 
 const start = async () => {
   try {
+    await initializeTracing().catch((error) => {
+      logger.warn({ err: error }, "Failed to initialize tracing");
+    });
+
     const { port } = getEnvConfig();
     await connectDB();
 
@@ -39,6 +44,7 @@ const registerShutdown = (server: Server) => {
       });
 
       await disconnectDB();
+      await shutdownTracing();
       logger.info("Shutdown complete");
       process.exit(0);
     } catch (shutdownError) {

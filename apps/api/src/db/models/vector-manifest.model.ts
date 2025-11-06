@@ -1,23 +1,27 @@
 import { VectorStoreTypeSchema, type VectorStoreType } from "@fin-rag/shared";
-import { Schema, model } from "mongoose";
+import { Schema, model, type HydratedDocument, type Model } from "mongoose";
 
-export interface VectorManifestDocument {
+export interface VectorManifestMetadata {
   ticker: string;
   embeddingModel: string;
   chunkSize: number;
   overlap: number;
   vectorStore: VectorStoreType;
   docIds: string[];
-  createdAt: Date;
-  updatedAt: Date;
 }
 
-const vectorManifestSchema = new Schema<VectorManifestDocument>(
+export type VectorManifestDocument = HydratedDocument<VectorManifestMetadata>;
+
+export interface VectorManifestModelStatics extends Model<VectorManifestMetadata> {
+  upsertManifest(manifest: VectorManifestMetadata): Promise<VectorManifestDocument>;
+}
+
+const vectorManifestSchema = new Schema<VectorManifestMetadata, VectorManifestModelStatics>(
   {
     ticker: { type: String, required: true, unique: true, uppercase: true, trim: true },
-    embeddingModel: { type: String, required: true },
-    chunkSize: { type: Number, required: true },
-    overlap: { type: Number, required: true },
+    embeddingModel: { type: String, required: true, trim: true },
+    chunkSize: { type: Number, required: true, min: 1 },
+    overlap: { type: Number, required: true, min: 0 },
     vectorStore: {
       type: String,
       required: true,
@@ -28,9 +32,29 @@ const vectorManifestSchema = new Schema<VectorManifestDocument>(
   { timestamps: true },
 );
 
-vectorManifestSchema.index({ ticker: 1 }, { unique: true });
+vectorManifestSchema.static(
+  "upsertManifest",
+  async function upsertManifest(manifest: VectorManifestMetadata) {
+    const existing = await this.findOne({ ticker: manifest.ticker });
+    const docIds = Array.from(new Set([...(existing?.docIds ?? []), ...(manifest.docIds ?? [])]));
 
-export const VectorManifestModel = model<VectorManifestDocument>(
+    return this.findOneAndUpdate(
+      { ticker: manifest.ticker },
+      {
+        $set: {
+          embeddingModel: manifest.embeddingModel,
+          chunkSize: manifest.chunkSize,
+          overlap: manifest.overlap,
+          vectorStore: manifest.vectorStore,
+          docIds,
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+  },
+);
+
+export const VectorManifestModel = model<VectorManifestMetadata, VectorManifestModelStatics>(
   "VectorManifest",
   vectorManifestSchema,
 );

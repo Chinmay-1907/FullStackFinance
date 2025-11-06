@@ -1,7 +1,7 @@
 import { IngestionSourceSchema, type IngestionSource } from "@fin-rag/shared";
-import { Schema, model } from "mongoose";
+import { Schema, model, type HydratedDocument, type Model } from "mongoose";
 
-export interface StoredDocument {
+export interface DocumentMetadata {
   ticker: string;
   sourceType: IngestionSource;
   url?: string;
@@ -10,11 +10,15 @@ export interface StoredDocument {
   textPath: string;
   textHash: string;
   bytes?: number;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
-const documentSchema = new Schema<StoredDocument>(
+export type StoredDocument = HydratedDocument<DocumentMetadata>;
+
+export interface DocumentModelStatics extends Model<DocumentMetadata> {
+  findByHash(textHash: string): Promise<StoredDocument | null>;
+}
+
+const documentSchema = new Schema<DocumentMetadata, DocumentModelStatics>(
   {
     ticker: { type: String, required: true, uppercase: true, trim: true },
     sourceType: {
@@ -24,23 +28,32 @@ const documentSchema = new Schema<StoredDocument>(
     },
     url: {
       type: String,
-      unique: true,
+      trim: true,
       sparse: true,
+      index: true,
     },
     formType: { type: String, trim: true },
     publishedAt: { type: Date },
-    textPath: { type: String, required: true },
+    textPath: { type: String, required: true, trim: true },
     textHash: {
       type: String,
       required: true,
       unique: true,
+      trim: true,
     },
-    bytes: { type: Number },
+    bytes: { type: Number, min: 0 },
   },
   { timestamps: true },
 );
 
 documentSchema.index({ ticker: 1, sourceType: 1, publishedAt: -1 });
-documentSchema.index({ textHash: 1 }, { unique: true });
+documentSchema.index({ textHash: "hashed" });
 
-export const DocumentModel = model<StoredDocument>("Document", documentSchema);
+documentSchema.static("findByHash", function findByHash(textHash: string) {
+  return this.findOne({ textHash });
+});
+
+export const DocumentModel = model<DocumentMetadata, DocumentModelStatics>(
+  "Document",
+  documentSchema,
+);
