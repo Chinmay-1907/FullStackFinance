@@ -108,6 +108,14 @@ All endpoints accept/produce JSON, validated with Zod schemas shared via `@share
     - `error` → shared error envelope
   - Clients set `Accept: text/event-stream`, stream tokens, and terminate when the `done` event arrives. Answers include bracketed references that align with the returned citations array.
 
+### Frontend Application (apps/web)
+
+- Vite + React + TypeScript app (`pnpm --filter @fin-rag/web dev`) that consumes the shared DTOs and mirrors backend contracts.
+- React Router routes: `/setup`, `/collect`, `/query`, `/insights`. Each route corresponds to the Phase 5/6 backend flows (credential validation, ingestion orchestration, streaming RAG, metrics placeholders).
+- React Query powers API calls with `@tanstack/react-query-devtools` enabled in dev. Query keys map directly to backend endpoints.
+- TailwindCSS provides styling primitives; component kit kept minimal (cards, badges, buttons) to stay close to design tokens.
+- The app expects `VITE_API_BASE_URL` (default `/api/v1`) for backend connectivity and streams `/rag/query` via the browser `ReadableStream` API while updating tokens/citations live.
+
 ### Metrics
 
 - `GET /metrics` → Prometheus-compatible text with default Node metrics plus:
