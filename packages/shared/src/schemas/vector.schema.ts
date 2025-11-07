@@ -16,3 +16,21 @@ export const VectorManifestSchema = z.object({
 });
 
 export type VectorManifest = z.infer<typeof VectorManifestSchema>;
+
+export const ChunkMetadataSchema = z.object({
+  docId: z.string(),
+  ticker: z.string(),
+  sourceType: z.enum(["sec", "transcripts", "news"]),
+  sequence: z.number().int().nonnegative(),
+  stage: z.literal("chunked"),
+  publishedAt: z.string().datetime({ offset: true }).optional(),
+});
+
+export const ChunkRecordSchema = z.object({
+  id: z.string(),
+  text: z.string().min(1),
+  textHash: z.string().min(1),
+  meta: ChunkMetadataSchema,
+});
+
+export type ChunkRecord = z.infer<typeof ChunkRecordSchema>;
