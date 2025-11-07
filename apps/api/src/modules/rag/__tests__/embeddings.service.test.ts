@@ -50,6 +50,7 @@ describe("EmbeddingsService", () => {
     expect(thirdCall[0]).toEqual(["chunk-e"]);
     expect(vectors).toHaveLength(5);
     expect(vectors[0]?.meta.ticker).toBe("TEST");
+    expect(vectors[0]?.text).toBe("chunk-a");
   });
 
   it("retries failed batches using backoff configuration", async () => {
@@ -71,6 +72,7 @@ describe("EmbeddingsService", () => {
 
     expect(embedMock).toHaveBeenCalledTimes(2);
     expect(vectors.map((vector) => vector.embedding[0])).toEqual([2, 2]);
+    expect(vectors[1]?.text).toBe("chunk-b");
   });
 
   it("uses cache when available to skip duplicate embeddings", async () => {
@@ -86,5 +88,14 @@ describe("EmbeddingsService", () => {
     await service.embedChunks(chunks, { cache });
 
     expect(embedMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("embeds ad-hoc queries for retrieval", async () => {
+    const provider = new MockProvider((texts: string[]) =>
+      Promise.resolve(texts.map((text) => [text.length])),
+    );
+    const service = new EmbeddingsService(provider);
+    const vector = await service.embedQuery("financial outlook");
+    expect(vector).toEqual([17]);
   });
 });

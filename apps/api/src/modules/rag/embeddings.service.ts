@@ -5,6 +5,7 @@ import { SpanStatusCode, trace } from "@opentelemetry/api";
 
 import { AppError } from "../../utils/errors";
 import { createModuleLogger } from "../../utils/logger";
+import { metrics } from "../../utils/metrics";
 import { executeWithRetry } from "../../utils/retry";
 import { getRetryConfig } from "../config/feature-flags";
 import { GeminiEmbeddingProvider } from "./providers/gemini.provider";
@@ -14,6 +15,7 @@ export type EmbeddingVector = {
   id: string;
   embedding: number[];
   meta: ChunkRecord["meta"];
+  text: string;
 };
 
 export interface IEmbeddingProvider {
@@ -70,6 +72,34 @@ export class EmbeddingsService {
       });
     }
     return new EmbeddingsService(provider, options);
+  }
+
+  async embedQuery(text: string) {
+    const span = tracer.startSpan("embed.query");
+    span.setAttribute("embeddings.provider", this.provider.name);
+    try {
+      const [vector] = await executeWithRetry(() => this.provider.embed([text]), {
+        attempts: this.retryConfig.maxAttempts,
+        baseDelayMs: this.retryConfig.initialDelayMs,
+        jitterRatio: this.retryConfig.jitterRatio,
+      });
+
+      if (!vector) {
+        throw new AppError("Embedding provider returned empty query vector", {
+          code: "UPSTREAM_ERROR",
+          status: 502,
+        });
+      }
+
+      span.setStatus({ code: SpanStatusCode.OK });
+      return vector;
+    } catch (error) {
+      span.recordException(error as Error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+      throw error;
+    } finally {
+      span.end();
+    }
   }
 
   async embedChunks(chunks: ChunkRecord[], options: EmbeddingsServiceOptions = {}) {
@@ -131,12 +161,14 @@ export class EmbeddingsService {
             id: chunk.id,
             embedding: vector,
             meta: chunk.meta,
+            text: chunk.text,
           });
         });
 
         batchSpan.setAttributes({
           "embeddings.batch_size": batch.length,
         });
+        metrics.recordEmbeddingBatch(this.provider.name);
         batchSpan.end();
       }
 

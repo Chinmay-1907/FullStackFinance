@@ -93,14 +93,27 @@ All endpoints accept/produce JSON, validated with Zod schemas shared via `@share
 
 ### Vector Store
 
-- `POST /vector-store/rebuild` → Rebuild vector store for given ticker(s)/sources.
-- `GET /vector-store/manifest?ticker=AAPL` → Returns vector manifest & document counts.
+- `VECTOR_STORE` env toggles FAISS (default) vs Pinecone (skeleton/TODO). FAISS persists JSON indexes to `/data/vector/<ticker>` (override via `VECTOR_DATA_DIR`) alongside a local manifest.
+- `VectorManifest` documents in Mongo capture embedding model, chunking params, and docIds per ticker. The `VectorStoreService` keeps manifests idempotent, handling rebuild vs append semantics.
+- Pinecone adapter stubs exist with TODOs for `PINECONE_API_KEY`, `PINECONE_INDEX`, and namespace strategy once production credentials are available.
+- Chunking defaults (size 1200 / overlap 150) and embedding batch sizes derive from the shared `RAGDefaults`; retry/batch knobs are centralized in `feature-flags.ts`.
 
 ### Query
 
-- `POST /query` → `{ ticker: string; question: string; k?: number; model?: string }`
-  - Response: `{ answer: string; citations: { docId: string; snippet: string; url?: string; score: number }[] }`
-  - Supports streaming responses; answer prompt enforces bullet points + synthesis paragraph with citations.
+- `POST /api/v1/rag/query` (SSE) → `{ ticker: string; question: string; k?: number; model?: string }`
+  - Events:
+    - `retrieval` → `{ ticker, chunkCount, citations }`
+    - `token` → `{ token: string }`
+    - `done` → final `QueryResponse` (`{ answer, citations, latencyMs }`)
+    - `error` → shared error envelope
+  - Clients set `Accept: text/event-stream`, stream tokens, and terminate when the `done` event arrives. Answers include bracketed references that align with the returned citations array.
+
+### Metrics
+
+- `GET /metrics` → Prometheus-compatible text with default Node metrics plus:
+  - `rag_chunks_processed_total{ticker,source}`
+  - `rag_embedding_batches_total{provider}`
+  - `rag_query_latency_ms_bucket{ticker,model,...}` histogram for percentile tracking
 
 ### Error Envelope
 
@@ -140,7 +153,9 @@ Raw document text and assets are stored either on disk (`/data/raw/<ticker>/<doc
 - **TODO:** Choose between Fastify and Express for the API (defaulting to Fastify unless constraints arise).
 - **TODO:** Finalize OCR strategy (tesseract.js vs. external microservice). Document integration steps.
 - **TODO:** Implement Pinecone adapter details (API key loading, namespace strategy).
+- **TODO:** Wire Groq/Gemini completion streaming once production API keys are provided (currently using a local mock provider for dev/test).
 - **TODO:** Define production deployment target (e.g., Render, Railway, AWS ECS) and IaC scripts.
+- **TODO:** Align Phase 6 frontend streaming client with the documented SSE contract (`retrieval`, `token`, `done`, `error` events).
 - **Assumption:** Secrets are managed via `.env` in development and an external secret manager in production.
 - **Assumption:** Initial implementation focuses on FAISS for local vector store with optional Pinecone integration.
 

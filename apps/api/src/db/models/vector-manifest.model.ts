@@ -12,8 +12,15 @@ export interface VectorManifestMetadata {
 
 export type VectorManifestDocument = HydratedDocument<VectorManifestMetadata>;
 
+export interface VectorManifestUpsertOptions {
+  replaceDocIds?: boolean;
+}
+
 export interface VectorManifestModelStatics extends Model<VectorManifestMetadata> {
-  upsertManifest(manifest: VectorManifestMetadata): Promise<VectorManifestDocument>;
+  upsertManifest(
+    manifest: VectorManifestMetadata,
+    options?: VectorManifestUpsertOptions,
+  ): Promise<VectorManifestDocument>;
 }
 
 const vectorManifestSchema = new Schema<VectorManifestMetadata, VectorManifestModelStatics>(
@@ -34,9 +41,17 @@ const vectorManifestSchema = new Schema<VectorManifestMetadata, VectorManifestMo
 
 vectorManifestSchema.static(
   "upsertManifest",
-  async function upsertManifest(manifest: VectorManifestMetadata) {
-    const existing = await this.findOne({ ticker: manifest.ticker });
-    const docIds = Array.from(new Set([...(existing?.docIds ?? []), ...(manifest.docIds ?? [])]));
+  async function upsertManifest(
+    manifest: VectorManifestMetadata,
+    options: VectorManifestUpsertOptions = {},
+  ) {
+    const existing = options.replaceDocIds ? null : await this.findOne({ ticker: manifest.ticker });
+
+    const mergedIds = options.replaceDocIds
+      ? manifest.docIds
+      : [...(existing?.docIds ?? []), ...(manifest.docIds ?? [])];
+
+    const docIds = Array.from(new Set(mergedIds.map((id) => id.trim()).filter(Boolean)));
 
     return this.findOneAndUpdate(
       { ticker: manifest.ticker },

@@ -7,8 +7,10 @@ import pinoHttp from "pino-http";
 
 import { configRouter } from "./modules/config/config.routes";
 import { ingestionRouter } from "./modules/ingestion/ingestion.routes";
+import { ragRouter } from "./modules/rag/rag.routes";
 import { AppError, createErrorEnvelope, ValidationError } from "./utils/errors";
 import { logger } from "./utils/logger";
+import { metrics } from "./utils/metrics";
 
 export const app: Express = express();
 const enableHttpLogging = process.env["NODE_ENV"] !== "test";
@@ -54,8 +56,18 @@ app.get("/healthz", (_req, res) => {
   res.status(200).send({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+app.get("/metrics", async (_req, res, next) => {
+  try {
+    res.setHeader("Content-Type", metrics.register.contentType);
+    res.send(await metrics.register.metrics());
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use("/api/v1/config", configRouter);
 app.use("/api/v1/ingestion", ingestionRouter);
+app.use("/api/v1/rag", ragRouter);
 
 const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   void _next;

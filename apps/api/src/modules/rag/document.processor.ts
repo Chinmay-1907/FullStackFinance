@@ -6,6 +6,7 @@ import type { ChunkRecord, IngestionSource } from "@fin-rag/shared";
 import { SpanStatusCode, trace } from "@opentelemetry/api";
 
 import { createModuleLogger } from "../../utils/logger";
+import { metrics } from "../../utils/metrics";
 
 export interface DocumentProcessorOptions {
   chunkSize: number;
@@ -85,6 +86,7 @@ export class DocumentProcessor {
         },
         "Document chunked",
       );
+      metrics.recordChunks(document.ticker, document.sourceType, chunkRecords.length);
 
       return Promise.resolve(chunkRecords);
     } catch (error) {

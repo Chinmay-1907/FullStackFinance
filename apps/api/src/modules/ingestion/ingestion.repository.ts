@@ -18,6 +18,7 @@ import {
   type StageErrorMetadata,
   type VectorManifestMetadata,
   VectorManifestModel,
+  type VectorManifestUpsertOptions,
   TickerModel,
 } from "../../db/models";
 
@@ -181,12 +182,18 @@ export class IngestionRepository {
     return job ? toIngestionStatus(job) : null;
   }
 
-  async upsertVectorManifest(manifest: VectorManifestMetadata) {
-    return VectorManifestModel.upsertManifest({
-      ...manifest,
-      ticker: normalizeTicker(manifest.ticker),
-      docIds: manifest.docIds.map(String),
-    });
+  async upsertVectorManifest(
+    manifest: VectorManifestMetadata,
+    options: VectorManifestUpsertOptions = {},
+  ) {
+    return VectorManifestModel.upsertManifest(
+      {
+        ...manifest,
+        ticker: normalizeTicker(manifest.ticker),
+        docIds: manifest.docIds.map(String),
+      },
+      options,
+    );
   }
 
   async findDocumentsForTicker(ticker: string, source?: IngestionSource) {
