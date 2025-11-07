@@ -3,7 +3,7 @@ import { Router } from "express";
 import { IngestionController } from "./ingestion.controller";
 
 const controller = new IngestionController();
-export const ingestionRouter = Router();
+export const ingestionRouter: Router = Router();
 
 // eslint-disable-next-line @typescript-eslint/no-misused-promises
 ingestionRouter.post("/start", controller.start);

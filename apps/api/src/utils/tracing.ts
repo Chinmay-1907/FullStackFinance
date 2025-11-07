@@ -53,9 +53,7 @@ export const initializeTracing = async () => {
     resource,
     traceExporter: exporter,
     instrumentations: [
-      new HttpInstrumentation({
-        ignoreIncomingPaths: [/healthz/],
-      }),
+      new HttpInstrumentation(),
       new ExpressInstrumentation(),
       new MongooseInstrumentation(),
     ],

@@ -8,7 +8,7 @@ const log = createModuleLogger("redis");
 
 const clients = new Set<Redis>();
 
-const createClient = () => {
+const createClient = (trackClient = true) => {
   const { redisUrl } = getEnvConfig();
 
   const client = new IORedis(redisUrl, {
@@ -23,7 +23,9 @@ const createClient = () => {
     log.info("Redis client connection closed");
   });
 
-  clients.add(client);
+  if (trackClient) {
+    clients.add(client);
+  }
   return client;
 };
 
@@ -41,4 +43,17 @@ export const closeRedisClients = async () => {
       }
     }),
   );
+};
+
+export const checkRedisHealth = async () => {
+  const client = createClient(false);
+  try {
+    await client.ping();
+    return true;
+  } catch (error) {
+    log.error({ err: error }, "Redis readiness check failed");
+    return false;
+  } finally {
+    client.disconnect();
+  }
 };

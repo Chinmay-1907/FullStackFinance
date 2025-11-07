@@ -2,6 +2,7 @@ import "dotenv/config";
 
 import { EmbeddingQueueJobSchema, type EmbeddingQueueJob } from "@fin-rag/shared";
 import { Job, Worker } from "bullmq";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 
 import { connectDB, disconnectDB } from "../db/connection";
 import { getQueueWorkerSettings, getRetryConfig } from "../modules/config/feature-flags";
@@ -17,23 +18,45 @@ import { parseWithSchema } from "../utils/validation";
 const log = createModuleLogger("worker:embedding");
 
 const workerSettings = getQueueWorkerSettings("embedding");
+const tracer = trace.getTracer("worker:embedding");
 
-const processEmbeddingJob = async (job: Job<unknown>) => {
+const processEmbeddingJob = async (job: Job<unknown>) =>
+  tracer.startActiveSpan("embedding.worker.process", async (span) => {
+    span.setAttributes({
+      "messaging.system": "bullmq",
+      "messaging.destination": job.queueName,
+      "messaging.message_id": job.id,
+    });
+
   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   const payload: EmbeddingQueueJob = parseWithSchema<EmbeddingQueueJob>(
     EmbeddingQueueJobSchema,
     job.data,
   );
 
+    span.setAttributes({
+      "ingestion.ticker": payload.ticker,
+      "embedding.document_count": payload.documentIds.length,
+    });
+
   log.info(
     { jobId: job.id, ticker: payload.ticker, documentCount: payload.documentIds.length },
     "Processing embedding job payload",
   );
 
-  // TODO: integrate vector store embedding pipeline
-  await job.updateProgress(1);
-  return { status: "accepted" as const };
-};
+    try {
+      // TODO: integrate vector store embedding pipeline
+      await job.updateProgress(1);
+      span.setStatus({ code: SpanStatusCode.OK });
+      return { status: "accepted" as const };
+    } catch (error) {
+      span.recordException(error as Error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
 
 const start = async () => {
   await initializeTracing();

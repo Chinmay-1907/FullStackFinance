@@ -123,6 +123,24 @@ All endpoints accept/produce JSON, validated with Zod schemas shared via `@share
   - `rag_embedding_batches_total{provider}`
   - `rag_query_latency_ms_bucket{ticker,model,...}` histogram for percentile tracking
 
+### Health & Readiness
+
+- `GET /healthz` → Lightweight probe confirming the API process is alive (used for basic uptime checks).
+- `GET /readyz` → Performs dependency checks against MongoDB and Redis, returning `ready`/`degraded` along with the active `requestId` so logs and traces can be correlated quickly.
+
+### Container & Ops
+
+- `docker-compose.yml` provisions MongoDB, Redis, MinIO (optional asset store), the API, and the web frontend. Local images are built via the service-specific Dockerfiles (`apps/api/Dockerfile`, `apps/web/Dockerfile`).
+- Usage:
+  1. `pnpm install` (once) to hydrate the workspace.
+  2. Copy `.env.example` → `.env` (API) and `apps/web/.env.example` → `apps/web/.env` to configure credentials.
+  3. `docker compose up --build` starts the entire stack (API on `:3001`, SPA on `:5173`, Mongo on `:27017`, Redis on `:6379`, MinIO on `:9000/9001`).
+- Frontend-only development: `pnpm --filter @fin-rag/web dev` (ensure `VITE_API_BASE_URL` points to the running API).
+
+### Continuous Integration
+
+- `.github/workflows/ci.yml` runs on every push/PR to `main`, installing dependencies with pnpm caching and executing `pnpm lint`, `pnpm test`, and `pnpm build` to keep observability hooks covered in automation.
+
 ### Error Envelope
 
 - All error responses conform to `{ code: string; message: string; details?: unknown }`.

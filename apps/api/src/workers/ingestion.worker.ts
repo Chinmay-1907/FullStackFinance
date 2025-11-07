@@ -7,6 +7,7 @@ import {
   type OcrQueueJob,
 } from "@fin-rag/shared";
 import { Job, Worker } from "bullmq";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 
 import { connectDB, disconnectDB } from "../db/connection";
 import { getQueueWorkerSettings, getRetryConfig } from "../modules/config/feature-flags";
@@ -22,17 +23,32 @@ import { parseWithSchema } from "../utils/validation";
 const log = createModuleLogger("worker:ingestion");
 
 const workerSettings = getQueueWorkerSettings("ingestion");
+const tracer = trace.getTracer("worker:ingestion");
 
-const processJob = async (job: Job<unknown>) => {
-  if (job.name === "ocr") {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    const payload: OcrQueueJob = parseWithSchema<OcrQueueJob>(OcrQueueJobSchema, job.data);
-    log.info({ jobId: job.id, documentId: payload.documentId }, "Processing OCR job payload");
+const processJob = async (job: Job<unknown>) =>
+  tracer.startActiveSpan("ingestion.worker.process", async (span) => {
+    span.setAttributes({
+      "messaging.system": "bullmq",
+      "messaging.destination": job.queueName,
+      "messaging.message_id": job.id,
+      "ingestion.job_name": job.name,
+    });
 
-    // TODO: Hand off to OCR provider and persist extracted text
-    await job.updateProgress(1);
-    return { status: "ocr-queued" as const };
-  }
+    if (job.name === "ocr") {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      const payload: OcrQueueJob = parseWithSchema<OcrQueueJob>(OcrQueueJobSchema, job.data);
+      log.info({ jobId: job.id, documentId: payload.documentId }, "Processing OCR job payload");
+      span.setAttributes({
+        "document.id": payload.documentId,
+        "ingestion.stage": "ocr",
+      });
+
+      // TODO: Hand off to OCR provider and persist extracted text
+      await job.updateProgress(1);
+      span.setStatus({ code: SpanStatusCode.OK });
+      span.end();
+      return { status: "ocr-queued" as const };
+    }
 
   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   const payload: IngestionQueueJob = parseWithSchema<IngestionQueueJob>(
@@ -45,10 +61,24 @@ const processJob = async (job: Job<unknown>) => {
     "Processing ingestion job payload",
   );
 
-  // TODO: Implement ingestion pipeline orchestration (download -> ocr -> clean -> chunk -> embed -> persist)
-  await job.updateProgress(1);
-  return { status: "accepted" as const };
-};
+    span.setAttributes({
+      "ingestion.ticker": payload.ticker,
+      "ingestion.sources": payload.sources?.join(",") ?? "",
+    });
+
+    try {
+      // TODO: Implement ingestion pipeline orchestration (download -> ocr -> clean -> chunk -> embed -> persist)
+      await job.updateProgress(1);
+      span.setStatus({ code: SpanStatusCode.OK });
+      return { status: "accepted" as const };
+    } catch (error) {
+      span.recordException(error as Error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
 
 const start = async () => {
   await initializeTracing();

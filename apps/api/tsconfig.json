@@ -5,8 +5,8 @@
     "rootDir": "./src",
     "module": "CommonJS",
     "paths": {
-      "@fin-rag/shared": ["packages/shared/src/index.ts"],
-      "@fin-rag/shared/*": ["packages/shared/src/*"]
+      "@fin-rag/shared": ["../../packages/shared/src/index.ts"],
+      "@fin-rag/shared/*": ["../../packages/shared/src/*"]
     }
   },
   "include": ["src"],

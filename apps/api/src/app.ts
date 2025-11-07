@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import cors from "cors";
 import express, { type ErrorRequestHandler, type Express } from "express";
+import mongoose from "mongoose";
 import type { LevelWithSilent, Logger } from "pino";
 import pinoHttp from "pino-http";
 
@@ -11,6 +12,7 @@ import { ragRouter } from "./modules/rag/rag.routes";
 import { AppError, createErrorEnvelope, ValidationError } from "./utils/errors";
 import { logger } from "./utils/logger";
 import { metrics } from "./utils/metrics";
+import { checkRedisHealth } from "./utils/redis";
 
 export const app: Express = express();
 const enableHttpLogging = process.env["NODE_ENV"] !== "test";
@@ -54,6 +56,28 @@ app.use(
 
 app.get("/healthz", (_req, res) => {
   res.status(200).send({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+app.get("/readyz", async (req, res) => {
+  const mongoState = mongoose.connection.readyState;
+  const mongoReady = mongoState === mongoose.ConnectionStates.connected;
+  const mongoLabel =
+    (mongoose.STATES as unknown as Record<number, string>)[mongoState] ?? "unknown";
+
+  const redisReady = await checkRedisHealth();
+  const requestWithId = req as typeof req & { id?: string };
+  const requestId = requestWithId.id ?? (res.getHeader("x-request-id") as string | undefined);
+  const overallReady = mongoReady && redisReady;
+
+  res.status(overallReady ? 200 : 503).json({
+    status: overallReady ? "ready" : "degraded",
+    requestId,
+    timestamp: new Date().toISOString(),
+    dependencies: {
+      mongo: { ready: mongoReady, state: mongoLabel },
+      redis: { ready: redisReady },
+    },
+  });
 });
 
 app.get("/metrics", async (_req, res, next) => {

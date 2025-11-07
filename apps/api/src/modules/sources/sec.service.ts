@@ -174,7 +174,12 @@ export class SecFilingsService {
 
     for (const index of indices) {
       const accessionNumber = recent.accessionNumber[index];
+      if (!accessionNumber) {
+        this.logger.warn({ index }, "Skipping filing without accession number");
+        continue;
+      }
       const primaryDocument = recent.primaryDocument[index];
+      const formValue = recent.form[index] ?? "UNKNOWN";
 
       if (!primaryDocument) {
         this.logger.warn({ accessionNumber }, "Skipping filing without primary document");
@@ -191,8 +196,8 @@ export class SecFilingsService {
         documents.push({
           sourceType: "sec",
           ticker: ticker.toUpperCase(),
-          title: recent.primaryDocDescription[index] ?? recent.form[index],
-          formType: recent.form[index],
+          title: recent.primaryDocDescription[index] ?? formValue,
+          formType: formValue,
           url: persisted.url,
           textPath: persisted.path,
           textHash: persisted.hash,
