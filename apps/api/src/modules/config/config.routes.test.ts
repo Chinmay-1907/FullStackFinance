@@ -1,6 +1,7 @@
 /* eslint-env jest */
 /* eslint-disable import/order, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
 
+import type { Express } from "express";
 import { ConfigModelsResponseSchema, ConfigValidateResponseSchema } from "@fin-rag/shared";
 import request from "supertest";
 
@@ -12,19 +13,27 @@ jest.mock("../ingestion/ingestion.service", () => ({
   })),
 }));
 
-import { app } from "../../app";
 import { resetEnvConfigCache } from "./config.service";
 
 describe("config routes", () => {
   const originalEnv = process.env;
+  let app: Express;
+
+  beforeAll(async () => {
+    process.env = {
+      ...originalEnv,
+      NODE_ENV: "test",
+      PORT: "3001",
+      MONGO_URI: "mongodb://localhost:27017/test",
+      REDIS_URL: "redis://localhost:6379",
+      VECTOR_STORE: "faiss",
+    };
+    resetEnvConfigCache();
+    app = (await import("../../app")).app;
+  });
 
   beforeEach(() => {
-    process.env = { ...originalEnv };
-    process.env["NODE_ENV"] = "test";
-    process.env["PORT"] = "3001";
-    process.env["MONGO_URI"] = "mongodb://localhost:27017/test";
-    process.env["REDIS_URL"] = "redis://localhost:6379";
-    process.env["VECTOR_STORE"] = "faiss";
+    process.env = { ...process.env };
     delete process.env["GROQ_API_KEY"];
     delete process.env["GEMINI_API_KEY"];
     delete process.env["TAVILY_API_KEY"];

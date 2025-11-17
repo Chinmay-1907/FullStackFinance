@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
 
+import type { Express } from "express";
 import request from "supertest";
 
-import { app } from "../../app";
+import { resetEnvConfigCache } from "../config/config.service";
 
 jest.mock("./ingestion.service", () => {
   const startIngestion = jest.fn();
@@ -34,6 +35,27 @@ const {
 ).__mocks;
 
 describe("Ingestion routes", () => {
+  const originalEnv = process.env;
+  let app: Express;
+
+  beforeAll(async () => {
+    process.env = {
+      ...originalEnv,
+      NODE_ENV: "test",
+      PORT: "3001",
+      MONGO_URI: "mongodb://localhost:27017/test",
+      REDIS_URL: "redis://localhost:6379",
+      VECTOR_STORE: "faiss",
+    };
+    resetEnvConfigCache();
+    app = (await import("../../app")).app;
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+    resetEnvConfigCache();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
