@@ -3,13 +3,12 @@ import {
   ConfigModelsResponseSchema,
   ConfigValidateRequestSchema,
   ConfigValidateResponseSchema,
-  DEFAULT_EMBEDDING_MODEL,
-  DEFAULT_MODEL,
-  DEFAULT_PROVIDER,
   SupportedModels
 } from "@fin-rag/shared";
 
+import { parseWithSchema } from "../../utils/validation";
 import { getEnvConfig } from "./config.service";
+import { getDefaultModels } from "./config.constants";
 
 export const configRouter = Router();
 
@@ -21,12 +20,13 @@ configRouter.get("/models", (_req, res, next) => {
       models: provider.models
     }));
 
-    const response = ConfigModelsResponseSchema.parse({
+    const defaults = getDefaultModels();
+    const response = parseWithSchema(ConfigModelsResponseSchema, {
       providers,
       defaults: {
-        provider: DEFAULT_PROVIDER,
-        model: DEFAULT_MODEL,
-        embeddingModel: DEFAULT_EMBEDDING_MODEL
+        provider: defaults.provider,
+        model: defaults.llm,
+        embeddingModel: defaults.embedding
       }
     });
 
@@ -38,7 +38,7 @@ configRouter.get("/models", (_req, res, next) => {
 
 configRouter.post("/validate", (req, res, next) => {
   try {
-    const payload = ConfigValidateRequestSchema.parse(req.body ?? {});
+    const payload = parseWithSchema(ConfigValidateRequestSchema, req.body ?? {});
     const envConfig = getEnvConfig();
 
     const envLookup: Record<string, string | undefined> = {
@@ -64,7 +64,7 @@ configRouter.post("/validate", (req, res, next) => {
       })
       .map(({ envKey }) => envKey);
 
-    const response = ConfigValidateResponseSchema.parse({
+    const response = parseWithSchema(ConfigValidateResponseSchema, {
       ok: missing.length === 0,
       missing
     });

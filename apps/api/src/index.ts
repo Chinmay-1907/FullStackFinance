@@ -6,10 +6,12 @@ import { app } from "./app";
 import { connectDB, disconnectDB } from "./db/connection";
 import { getEnvConfig } from "./modules/config/config.service";
 import { logger } from "./utils/logger";
+import { initializeTracing, shutdownTracing } from "./utils/tracing";
 
 const start = async () => {
   try {
     const { port } = getEnvConfig();
+    await initializeTracing();
     await connectDB();
 
     const server = app.listen(port, () => {
@@ -19,6 +21,17 @@ const start = async () => {
     registerShutdown(server);
   } catch (error) {
     logger.error({ err: error }, "Failed to start API server");
+    try {
+      await shutdownTracing();
+    } catch (tracingError) {
+      logger.error({ err: tracingError }, "Error shutting down tracing after failure");
+    }
+
+    try {
+      await disconnectDB();
+    } catch (disconnectError) {
+      logger.error({ err: disconnectError }, "Error closing Mongo connection after failure");
+    }
     process.exit(1);
   }
 };
@@ -38,7 +51,7 @@ const registerShutdown = (server: Server) => {
         });
       });
 
-      await disconnectDB();
+      await Promise.all([disconnectDB(), shutdownTracing()]);
       logger.info("Shutdown complete");
       process.exit(0);
     } catch (shutdownError) {

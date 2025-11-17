@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 import { getEnvConfig } from "../modules/config/config.service";
 import { logger } from "../utils/logger";
+import { retry } from "../utils/retry";
 
 let connectionPromise: Promise<typeof mongoose> | null = null;
 
@@ -9,7 +10,7 @@ const handleConnectionEvents = () => {
   const connection = mongoose.connection;
 
   connection.on("connected", () => {
-    logger.info("MongoDB connection established");
+    logger.debug("MongoDB connection established");
   });
 
   connection.on("error", (error) => {
@@ -26,7 +27,15 @@ handleConnectionEvents();
 export const connectDB = async () => {
   if (!connectionPromise) {
     const { mongoUri } = getEnvConfig();
-    connectionPromise = mongoose.connect(mongoUri);
+
+    connectionPromise = retry(() => mongoose.connect(mongoUri), {
+      onRetry: (error, attempt) => {
+        logger.warn({ err: error, attempt }, "Retrying MongoDB connection");
+      }
+    }).then((conn) => {
+      logger.info({ hosts: mongoose.connection.host }, "MongoDB connected");
+      return conn;
+    });
   }
 
   return connectionPromise;
