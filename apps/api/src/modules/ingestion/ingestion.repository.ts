@@ -63,6 +63,7 @@ const toIngestionStatus = (job: IngestionJobDocument): IngestionStatus => {
     jobId: job._id.toString(),
     ticker: job.ticker,
     status: job.status,
+    sources: job.sources ?? [],
     progress: job.progress,
     currentStage: getCurrentStageName(job),
     stages: job.stages.map(toIngestionStage),
@@ -88,21 +89,44 @@ export class IngestionRepository {
     ).exec();
   }
 
-  async upsertDocument(metadata: DocumentMetadata) {
-    const payload = {
+  async createDocument(metadata: DocumentMetadata) {
+    return DocumentModel.create({
       ...metadata,
       ticker: normalizeTicker(metadata.ticker),
-    };
+    });
+  }
 
-    return DocumentModel.findOneAndUpdate(
-      { textHash: payload.textHash },
-      { $set: payload },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+  async updateDocument(documentId: ObjectIdLike, updates: Partial<DocumentMetadata>) {
+    return DocumentModel.findByIdAndUpdate(
+      documentId,
+      {
+        $set: {
+          ...updates,
+          ...(updates.ticker ? { ticker: normalizeTicker(updates.ticker) } : {}),
+        },
+      },
+      { new: true },
     ).exec();
   }
 
-  async findDocumentByHash(textHash: string) {
-    return DocumentModel.findByHash(textHash);
+  async findDocumentsByJob(jobId: ObjectIdLike) {
+    return DocumentModel.find({ jobId: jobId.toString() }).sort({ createdAt: 1 }).exec();
+  }
+
+  async setDocumentApprovalStatus(documentId: ObjectIdLike, status: DocumentMetadata["approvalStatus"]) {
+    return DocumentModel.findByIdAndUpdate(
+      documentId,
+      { $set: { approvalStatus: status } },
+      { new: true },
+    ).exec();
+  }
+
+  async approveDocumentsForJob(jobId: ObjectIdLike) {
+    const result = await DocumentModel.updateMany(
+      { jobId: jobId.toString(), approvalStatus: { $ne: "approved" } },
+      { $set: { approvalStatus: "approved" } },
+    ).exec();
+    return result.modifiedCount ?? 0;
   }
 
   async seedJobStages(job: IngestionJobDocument, stages: IngestionStageName[]) {
@@ -112,10 +136,16 @@ export class IngestionRepository {
     return job.save();
   }
 
-  async createJob(ticker: string, stages: IngestionStageName[] = [...INGESTION_STAGE_SEQUENCE]) {
+  async createJob(
+    ticker: string,
+    options: { stages?: IngestionStageName[]; sources?: IngestionSource[] } = {},
+  ) {
+    const stages = options.stages ?? [...INGESTION_STAGE_SEQUENCE];
+    const sources = options.sources ?? [];
     const job = await IngestionJobModel.create({
       ticker: normalizeTicker(ticker),
       status: stages.length ? "queued" : "queued",
+      sources,
     });
 
     if (stages.length) {
@@ -127,6 +157,10 @@ export class IngestionRepository {
 
   async getJob(jobId: ObjectIdLike) {
     return IngestionJobModel.findById(jobId).exec();
+  }
+
+  async getDocumentById(documentId: ObjectIdLike) {
+    return DocumentModel.findById(documentId).exec();
   }
 
   async getLatestJobForTicker(ticker: string) {
@@ -182,6 +216,10 @@ export class IngestionRepository {
     return job ? toIngestionStatus(job) : null;
   }
 
+  async markJobAwaitingApproval(jobId: ObjectIdLike) {
+    return this.setJobStatus(jobId, "awaiting_approval");
+  }
+
   async upsertVectorManifest(
     manifest: VectorManifestMetadata,
     options: VectorManifestUpsertOptions = {},
@@ -196,12 +234,15 @@ export class IngestionRepository {
     );
   }
 
-  async findDocumentsForTicker(ticker: string, source?: IngestionSource) {
+  async findDocumentsForTicker(ticker: string, source?: IngestionSource, jobId?: string) {
     const query: Record<string, unknown> = {
       ticker: normalizeTicker(ticker),
     };
     if (source) {
       query["sourceType"] = source;
+    }
+    if (jobId) {
+      query["jobId"] = jobId;
     }
     return DocumentModel.find(query).sort({ publishedAt: -1, createdAt: -1 }).exec();
   }

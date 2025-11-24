@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import cors from "cors";
-import express, { type ErrorRequestHandler, type Express } from "express";
+import express, { type ErrorRequestHandler, type Express, type Request, type Response } from "express";
 import mongoose from "mongoose";
 import type { LevelWithSilent, Logger } from "pino";
 import pinoHttp from "pino-http";
@@ -17,6 +17,15 @@ import { checkRedisHealth } from "./utils/redis";
 export const app: Express = express();
 const enableHttpLogging = process.env["NODE_ENV"] !== "test";
 
+const withRequestContext = (
+  _req: Request,
+  res: Response,
+  payload: Record<string, unknown> = {},
+) => ({
+  ...payload,
+  requestId: res.getHeader("x-request-id"),
+});
+
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 app.use(
@@ -31,9 +40,8 @@ app.use(
       res.setHeader("x-request-id", requestId);
       return requestId;
     },
-    customProps: (_req, res) => ({
-      requestId: res.getHeader("x-request-id"),
-    }),
+    customSuccessObject: (req, res, payload) => withRequestContext(req, res, payload),
+    customErrorObject: (req, res, _error, payload) => withRequestContext(req, res, payload),
     customLogLevel: (_req, res, err): LevelWithSilent => {
       if (err) {
         return "error";

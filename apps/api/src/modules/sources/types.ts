@@ -13,6 +13,7 @@ export interface NormalizedSourceDocument {
   title?: string;
   url?: string;
   formType?: string;
+  contentType?: string;
   textPath: string;
   textHash: string;
   bytes: number;

@@ -12,6 +12,14 @@ export default defineConfig({
       "@shared": path.resolve(__dirname, "../../packages/shared/src"),
     },
   },
+  server: {
+    proxy: {
+      "/api/v1": {
+        target: "http://localhost:5000",
+        changeOrigin: true,
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     globals: true,

@@ -58,7 +58,7 @@ export const DEFAULT_MODEL =
 
 export const DEFAULT_EMBEDDING_MODEL =
   findModelByType(SupportedModels[DEFAULT_PROVIDER].models, "embedding") ??
-  SupportedModels[DEFAULT_PROVIDER].models[0].id;
+  "sentence-transformers/all-MiniLM-L6-v2";
 
 export const RAGDefaults = {
   chunkSize: 1200,

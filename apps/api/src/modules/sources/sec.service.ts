@@ -23,7 +23,8 @@ type SecFilingsResponse = {
   };
 };
 
-const COMPANY_TICKERS_URL = "https://www.sec.gov/files/company-tickers.json";
+const COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json";
+const BROWSE_EDGAR_URL = "https://www.sec.gov/cgi-bin/browse-edgar";
 
 const formatCik = (cik: string) => cik.padStart(10, "0");
 
@@ -60,7 +61,6 @@ export class SecFilingsService {
     if (this.companyIndexLoaded) {
       return;
     }
-
     await this.throttle();
     const response = await this.fetchFn(COMPANY_TICKERS_URL, {
       headers: {
@@ -70,7 +70,7 @@ export class SecFilingsService {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to load SEC ticker index: ${response.statusText}`);
+      throw new Error(`Failed to load SEC ticker index: ${response.status} ${response.statusText}`);
     }
 
     const raw = (await response.json()) as Record<
@@ -89,13 +89,64 @@ export class SecFilingsService {
   }
 
   private async resolveTicker(ticker: string) {
-    await this.loadCompanyIndex();
+    try {
+      await this.loadCompanyIndex();
+    } catch (error) {
+      this.logger.warn({ err: error }, "Failed to load SEC ticker index; falling back to lookup");
+    }
     const normalized = ticker.trim().toUpperCase();
     const entry = this.companyIndex.get(normalized);
-    if (!entry) {
-      throw new NotFoundError(`SEC filings not found for ticker ${normalized}`);
+    if (entry) {
+      return entry;
     }
-    return entry;
+
+    const fallback = await this.lookupTickerViaBrowseEdgar(normalized);
+    if (fallback) {
+      this.companyIndex.set(normalized, fallback);
+      return fallback;
+    }
+
+    throw new NotFoundError(`SEC filings not found for ticker ${normalized}`);
+  }
+
+  private async lookupTickerViaBrowseEdgar(ticker: string): Promise<CompanyTickerEntry | null> {
+    const params = new URLSearchParams({
+      CIK: ticker,
+      owner: "exclude",
+      action: "getcompany",
+      output: "atom",
+    });
+
+    await this.throttle();
+    const response = await this.fetchFn(`${BROWSE_EDGAR_URL}?${params.toString()}`, {
+      headers: {
+        "User-Agent": this.getUserAgent(),
+        Accept: "application/atom+xml, text/xml;q=0.9, */*;q=0.8",
+      },
+    });
+
+    if (!response.ok) {
+      this.logger.error(
+        { ticker, status: response.status, statusText: response.statusText },
+        "Browse-Edgar lookup failed",
+      );
+      return null;
+    }
+
+    const xml = await response.text();
+    const cikMatch = xml.match(/<cik>(\d+)<\/cik>/i);
+    const cikValue = cikMatch?.[1];
+    if (!cikValue) {
+      this.logger.warn({ ticker }, "Browse-Edgar response did not include a CIK");
+      return null;
+    }
+    const nameMatch = xml.match(/<conformed-name>([^<]+)<\/conformed-name>/i);
+    const resolvedName = nameMatch?.[1]?.trim();
+
+    return {
+      cik: cikValue,
+      title: resolvedName && resolvedName.length > 0 ? resolvedName : ticker,
+    };
   }
 
   private async fetchFilingsFeed(cik: string): Promise<SecFilingsResponse> {
@@ -117,11 +168,16 @@ export class SecFilingsService {
     return (await response.json()) as SecFilingsResponse;
   }
 
+  private sanitizeDocumentName(primaryDocument: string) {
+    const base = primaryDocument.split(/[\\/]/).pop() ?? primaryDocument;
+    return base.replace(/[^a-zA-Z0-9._-]/g, "_");
+  }
+
   private async downloadPrimaryDocument(
     cik: string,
     accessionNumber: string,
     primaryDocument: string,
-  ): Promise<PersistedFile & { url: string }> {
+  ): Promise<PersistedFile & { url: string; contentType?: string }> {
     const sanitizedAccession = accessionNumber.replace(/-/g, "");
     const downloadUrl = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${sanitizedAccession}/${primaryDocument}`;
 
@@ -138,15 +194,17 @@ export class SecFilingsService {
     }
 
     const buffer = Buffer.from(await response.arrayBuffer());
+    const contentType = response.headers.get("content-type") ?? undefined;
     const persisted = await persistBuffer(
       buffer,
       pathSegmentForTicker(cik),
-      `${sanitizedAccession}-${primaryDocument}`,
+      `${sanitizedAccession}-${this.sanitizeDocumentName(primaryDocument)}`,
     );
 
     return {
       ...persisted,
       url: downloadUrl,
+      contentType,
     };
   }
 
@@ -199,6 +257,7 @@ export class SecFilingsService {
           title: recent.primaryDocDescription[index] ?? formValue,
           formType: formValue,
           url: persisted.url,
+          contentType: persisted.contentType,
           textPath: persisted.path,
           textHash: persisted.hash,
           bytes: persisted.bytes,

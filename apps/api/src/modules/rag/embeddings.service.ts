@@ -10,6 +10,7 @@ import { executeWithRetry } from "../../utils/retry";
 import { getRetryConfig } from "../config/feature-flags";
 import { GeminiEmbeddingProvider } from "./providers/gemini.provider";
 import { GroqEmbeddingProvider } from "./providers/groq.provider";
+import { LocalEmbeddingProvider } from "./providers/local.provider";
 
 export type EmbeddingVector = {
   id: string;
@@ -33,11 +34,16 @@ const tracer = trace.getTracer("rag:embeddings-service");
 const log = createModuleLogger("rag:embeddings");
 
 const PROVIDERS: Record<string, IEmbeddingProvider> = {
+  local: new LocalEmbeddingProvider(),
   groq: new GroqEmbeddingProvider(),
   gemini: new GeminiEmbeddingProvider(),
 };
 
 const inferProviderKey = (modelId: string) => {
+  const configured = process.env["EMBEDDING_PROVIDER"];
+  if (configured && PROVIDERS[configured]) {
+    return configured;
+  }
   const normalized = modelId.toLowerCase();
   if (normalized.includes("groq")) {
     return "groq";
@@ -45,7 +51,7 @@ const inferProviderKey = (modelId: string) => {
   if (normalized.includes("gemini")) {
     return "gemini";
   }
-  return "groq";
+  return "local";
 };
 
 export class EmbeddingsService {

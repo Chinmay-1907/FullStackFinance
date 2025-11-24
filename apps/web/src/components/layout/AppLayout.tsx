@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { API_BASE_URL } from "../../lib/env";
 
 const routes = [
   { path: "/setup", label: "Setup" },
@@ -38,7 +39,7 @@ export const AppLayout = () => {
           </nav>
           <div className="mt-auto rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
             <p className="font-semibold text-slate-800">Environment</p>
-            <p className="mt-1">API: {import.meta.env["VITE_API_BASE_URL"] ?? "not-set"}</p>
+            <p className="mt-1">API: {API_BASE_URL}</p>
           </div>
         </aside>
 

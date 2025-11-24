@@ -54,6 +54,7 @@ describe("IngestionService", () => {
       jobId: "123",
       ticker: "AAPL",
       status: "queued",
+      sources: ["sec"],
       progress: 0,
       currentStage: null,
       stages: [],

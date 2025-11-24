@@ -1,9 +1,15 @@
-import { JobStageStatusSchema, type JobStageStatus } from "@fin-rag/shared";
+import {
+  IngestionSourceSchema,
+  type IngestionSource,
+  JobStageStatusSchema,
+  type JobStageStatus,
+} from "@fin-rag/shared";
 import { Schema, model, type HydratedDocument, type Model, type Types } from "mongoose";
 
 export const INGESTION_STAGE_SEQUENCE = [
   "download",
   "ocr",
+  "review",
   "clean",
   "chunk",
   "embed",
@@ -14,7 +20,7 @@ export type IngestionStageName = (typeof INGESTION_STAGE_SEQUENCE)[number];
 
 const STAGE_ORDER = new Map(INGESTION_STAGE_SEQUENCE.map((name, index) => [name, index]));
 
-export type IngestionJobStatus = "queued" | "running" | "failed" | "completed";
+export type IngestionJobStatus = "queued" | "running" | "failed" | "completed" | "awaiting_approval";
 
 export interface StageErrorMetadata {
   message: string;
@@ -43,12 +49,14 @@ export interface JobStatusTimestamps {
   runningAt?: Date;
   failedAt?: Date;
   completedAt?: Date;
+  awaitingApprovalAt?: Date;
   updatedAt: Date;
 }
 
 export interface IngestionJobMetadata {
   ticker: string;
   status: IngestionJobStatus;
+  sources: IngestionSource[];
   stages: Types.DocumentArray<IngestionStageDocument>;
   progress: number;
   statusTimestamps: JobStatusTimestamps;
@@ -134,6 +142,7 @@ const jobTimestampSchema = new Schema<JobStatusTimestamps>(
     runningAt: { type: Date },
     failedAt: { type: Date },
     completedAt: { type: Date },
+    awaitingApprovalAt: { type: Date },
     updatedAt: { type: Date, default: () => new Date() },
   },
   { _id: false },
@@ -149,8 +158,13 @@ const ingestionJobSchema = new Schema<
     status: {
       type: String,
       required: true,
-      enum: ["queued", "running", "failed", "completed"],
+      enum: ["queued", "running", "failed", "completed", "awaiting_approval"],
       default: "queued",
+    },
+    sources: {
+      type: [String],
+      enum: IngestionSourceSchema.options,
+      default: [],
     },
     stages: { type: [stageSchema], default: [] },
     progress: { type: Number, min: 0, max: 1, default: 0 },
@@ -177,6 +191,7 @@ const jobStatusFieldMap: Record<IngestionJobStatus, keyof JobStatusTimestamps> =
   running: "runningAt",
   failed: "failedAt",
   completed: "completedAt",
+  awaiting_approval: "awaitingApprovalAt",
 };
 
 const touchStageTimestamp = (stage: IngestionStageDocument, status: JobStageStatus) => {

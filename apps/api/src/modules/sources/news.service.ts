@@ -94,6 +94,7 @@ export class NewsService {
         ticker: ticker.toUpperCase(),
         title: item.title,
         url: item.url,
+        contentType: "text/plain; charset=utf-8",
         textPath: persisted.path,
         textHash: persisted.hash,
         bytes: persisted.bytes,

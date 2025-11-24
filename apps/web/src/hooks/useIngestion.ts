@@ -21,7 +21,27 @@ export const useIngestionStatus = (jobId?: string, options: StatusOptions = {}) 
     queryFn: ({ signal }) => apiClient.fetchIngestionStatus(jobId!, signal),
   });
 
+export const useIngestionDocuments = (
+  params: { ticker?: string; jobId?: string },
+  enabled = true,
+) =>
+  useQuery({
+    queryKey: queryKeys.ingestionDocuments(params.ticker ?? "", params.jobId),
+    enabled: Boolean(params.ticker) && enabled,
+    queryFn: () =>
+      apiClient.fetchIngestionDocuments({
+        ticker: params.ticker!,
+        jobId: params.jobId,
+      }),
+    staleTime: 60_000,
+  });
+
 export const useRetryIngestion = () =>
   useMutation({
     mutationFn: (jobId: string) => apiClient.retryIngestion(jobId),
+  });
+
+export const useApproveIngestion = () =>
+  useMutation({
+    mutationFn: (jobId: string) => apiClient.approveIngestion(jobId),
   });

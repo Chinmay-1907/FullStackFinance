@@ -27,11 +27,26 @@ export const ConfigModelsResponseSchema = z.object({
 
 export type ConfigModelsResponse = z.infer<typeof ConfigModelsResponseSchema>;
 
+const optionalTrimmedString = z.preprocess((value) => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" ? undefined : trimmed;
+  }
+  return value;
+}, z.string().min(1).optional());
+
 export const ConfigValidateRequestSchema = z.object({
-  groqKey: z.string().trim().min(1).optional(),
-  geminiKey: z.string().trim().min(1).optional(),
-  tavilyKey: z.string().trim().min(1).optional(),
-  secEmail: z.string().email().optional(),
+  groqKey: optionalTrimmedString,
+  geminiKey: optionalTrimmedString,
+  tavilyKey: optionalTrimmedString,
+  secEmail: z
+    .preprocess((value) => {
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        return trimmed === "" ? undefined : trimmed;
+      }
+      return value;
+    }, z.string().email().optional()),
 });
 
 export type ConfigValidateRequest = z.infer<typeof ConfigValidateRequestSchema>;
@@ -39,6 +54,8 @@ export type ConfigValidateRequest = z.infer<typeof ConfigValidateRequestSchema>;
 export const ConfigValidateResponseSchema = z.object({
   ok: z.boolean(),
   missing: z.array(z.string()).default([]),
+  greeting: z.string().optional(),
+  greetingProvider: z.enum(["groq", "gemini", "local", "test"]).optional(),
 });
 
 export type ConfigValidateResponse = z.infer<typeof ConfigValidateResponseSchema>;

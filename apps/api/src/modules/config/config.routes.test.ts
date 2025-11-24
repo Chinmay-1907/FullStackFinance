@@ -65,6 +65,23 @@ describe("config routes", () => {
     );
   });
 
+  it("treats groq or gemini as optional alternatives", async () => {
+    const response = await request(app)
+      .post("/api/v1/config/validate")
+      .send({
+        groqKey: "abc",
+        tavilyKey: "ghi",
+        secEmail: "user@example.com",
+      });
+
+    expect(response.status).toBe(200);
+    const parsed = ConfigValidateResponseSchema.parse(response.body);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.missing).not.toContain("GEMINI_API_KEY");
+    expect(parsed.greeting).toMatch(/Test-mode hello/i);
+    expect(parsed.greetingProvider).toBe("test");
+  });
+
   it("accepts user-provided credentials to satisfy validation", async () => {
     process.env["GROQ_API_KEY"] = "";
     process.env["GEMINI_API_KEY"] = "";
@@ -83,5 +100,7 @@ describe("config routes", () => {
     const parsed = ConfigValidateResponseSchema.parse(response.body);
     expect(parsed.ok).toBe(true);
     expect(parsed.missing).toHaveLength(0);
+    expect(parsed.greeting).toMatch(/Test-mode hello/i);
+    expect(parsed.greetingProvider).toBe("test");
   });
 });

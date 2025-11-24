@@ -1,6 +1,7 @@
 import { createModuleLogger } from "../../utils/logger";
 
 import { EnvSchema, type EnvConfig } from "./env.schema";
+import { applyRuntimeCredentialsToEnv } from "./runtime-credentials";
 
 let cachedConfig: EnvConfig | null = null;
 const log = createModuleLogger("config:service");
@@ -8,7 +9,8 @@ const log = createModuleLogger("config:service");
 const redactCredential = (value?: string | null) => (value ? "set" : "unset");
 
 export const getEnvConfig = (): EnvConfig => {
-  if (!cachedConfig) {
+  const runtimeChanged = applyRuntimeCredentialsToEnv();
+  if (!cachedConfig || runtimeChanged) {
     cachedConfig = EnvSchema.parse(process.env);
 
     log.info(

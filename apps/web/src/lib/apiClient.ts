@@ -2,6 +2,7 @@ import {
   ConfigModelsResponseSchema,
   ConfigValidateRequestSchema,
   ConfigValidateResponseSchema,
+  IngestionDocumentsResponseSchema,
   IngestionStartRequestSchema,
   IngestionStatusSchema,
   QueryRequestSchema,
@@ -9,7 +10,7 @@ import {
 import type { IngestionStatus } from "@fin-rag/shared";
 import type { Citation, ConfigValidateRequest, IngestionStartRequest, QueryRequest } from "@fin-rag/shared";
 import { z } from "zod";
-import { buildApiUrl } from "./env";
+import { API_BASE_URL, FALLBACK_API_BASE_URL, buildApiUrl } from "./env";
 
 export interface ErrorEnvelope {
   code: string;
@@ -49,30 +50,90 @@ const parseResponse = async (response: Response) => {
   }
 };
 
-const request = async <T>(
-  path: string,
-  schema: { parse: (data: unknown) => T },
-  { method = "GET", body, signal }: RequestOptions = {},
-): Promise<T> => {
-  const response = await fetch(buildApiUrl(path), {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    signal,
-  });
+const isAbortError = (error: unknown) =>
+  typeof DOMException !== "undefined" &&
+  error instanceof DOMException &&
+  error.name === "AbortError";
 
-  const data = await parseResponse(response);
-  if (!response.ok) {
-    throw new ApiError(
-      (data as ErrorEnvelope | null)?.message ?? "Request failed",
-      response.status,
-      data as ErrorEnvelope,
+const formatNetworkError = (error: unknown, baseUrl: string) => {
+  if (error instanceof ApiError || isAbortError(error)) {
+    return error;
+  }
+
+  if (error instanceof TypeError) {
+    return new ApiError(
+      `Unable to reach API at ${baseUrl}. ${error.message}. Verify the server is running and that VITE_API_BASE_URL points to it.`,
+      503,
     );
   }
 
-  return schema.parse(data);
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return new Error(String(error));
+};
+
+const fetchFromBase = async <T>(
+  path: string,
+  schema: { parse: (data: unknown) => T },
+  { method = "GET", body, signal }: RequestOptions,
+  baseUrl: string,
+) => {
+  try {
+    const response = await fetch(buildApiUrl(path, baseUrl), {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal,
+    });
+
+    const data = await parseResponse(response);
+    if (!response.ok) {
+      throw new ApiError(
+        (data as ErrorEnvelope | null)?.message ?? "Request failed",
+        response.status,
+        data as ErrorEnvelope,
+      );
+    }
+
+    return schema.parse(data);
+  } catch (error) {
+    throw formatNetworkError(error, baseUrl);
+  }
+};
+
+const request = async <T>(
+  path: string,
+  schema: { parse: (data: unknown) => T },
+  options: RequestOptions = {},
+): Promise<T> => {
+  const attempted = new Set<string>();
+  let lastError: unknown;
+
+  for (const base of [API_BASE_URL, FALLBACK_API_BASE_URL]) {
+    if (attempted.has(base)) {
+      continue;
+    }
+    attempted.add(base);
+
+    try {
+      return await fetchFromBase(path, schema, options, base);
+    } catch (error) {
+      lastError = error;
+
+      if (!(error instanceof ApiError) || error.status !== 503 || base === FALLBACK_API_BASE_URL) {
+        throw error;
+      }
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+  throw new Error("Unable to reach API");
 };
 
 export interface QueryStreamHandlers {
@@ -179,6 +240,24 @@ export const apiClient = {
     }),
   retryIngestion: (jobId: string) =>
     request(`/ingestion/retry/${jobId}`, IngestionStatusSchema, { method: "POST" }),
+  fetchIngestionDocuments: (params: { ticker: string; source?: string; jobId?: string }) => {
+    const search = new URLSearchParams({ ticker: params.ticker });
+    if (params.source) {
+      search.set("source", params.source);
+    }
+    if (params.jobId) {
+      search.set("jobId", params.jobId);
+    }
+    return request(`/ingestion/documents?${search.toString()}`, IngestionDocumentsResponseSchema, {
+      method: "GET",
+    });
+  },
+  buildDocumentDownloadUrl: (docId: string) =>
+    buildApiUrl(`/ingestion/documents/${docId}/download`),
+  approveIngestion: (jobId: string) =>
+    request(`/ingestion/${jobId}/approve`, z.object({ jobId: z.string().min(1) }), {
+      method: "POST",
+    }),
 };
 
 export type { IngestionStatus } from "@fin-rag/shared";

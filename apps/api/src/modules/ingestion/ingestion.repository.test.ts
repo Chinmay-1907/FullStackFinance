@@ -26,32 +26,28 @@ describe("IngestionRepository", () => {
     expect(updated?.name).toBe("Tesla Inc.");
   });
 
-  it("deduplicates documents by text hash", async () => {
-    const basePayload = {
+  it("creates documents tied to a job id", async () => {
+    await repository.createDocument({
       ticker: "aapl",
-      sourceType: "sec" as const,
+      jobId: "abc123",
+      sourceType: "sec",
       textPath: "/tmp/aapl-10k.txt",
-      textHash: "hash-123",
-    };
-
-    const first = await repository.upsertDocument(basePayload);
-    const second = await repository.upsertDocument({
-      ...basePayload,
-      url: "https://example.com/aapl-10k",
+      textHash: "hash-raw",
     });
 
-    expect(first?.id).toEqual(second?.id);
-    await expect(DocumentModel.countDocuments()).resolves.toBe(1);
+    const stored = await DocumentModel.findOne({ ticker: "AAPL" }).lean();
+    expect(stored?.jobId).toBe("abc123");
   });
 
   it("updates stage lifecycle state and exposes status DTO", async () => {
     const pipeline = [INGESTION_STAGE_SEQUENCE[0], INGESTION_STAGE_SEQUENCE[1]];
-    const job = await repository.createJob("msft", pipeline);
+    const job = await repository.createJob("msft", { stages: pipeline, sources: ["sec"] });
 
     const running = await repository.markStageRunning(job.id, INGESTION_STAGE_SEQUENCE[0]);
     expect(running).not.toBeNull();
     expect(running?.status).toBe("running");
     expect(running?.currentStage).toBe(INGESTION_STAGE_SEQUENCE[0]);
+    expect(running?.sources).toEqual(["sec"]);
 
     const completed = await repository.markStageComplete(job.id, INGESTION_STAGE_SEQUENCE[0]);
     expect(
@@ -70,10 +66,14 @@ describe("IngestionRepository", () => {
     const latest = await repository.getJobStatus(job.id);
     expect(latest?.status).toBe("failed");
     expect(latest?.currentStage).toBe(INGESTION_STAGE_SEQUENCE[1]);
+    expect(latest?.sources).toEqual(["sec"]);
   });
 
   it("prepares failed jobs for retry while preserving completed stages", async () => {
-    const job = await repository.createJob("nvda", INGESTION_STAGE_SEQUENCE.slice(0, 3));
+    const job = await repository.createJob("nvda", {
+      stages: INGESTION_STAGE_SEQUENCE.slice(0, 3),
+      sources: ["transcripts"],
+    });
 
     await repository.markStageRunning(job.id, INGESTION_STAGE_SEQUENCE[0]);
     await repository.markStageComplete(job.id, INGESTION_STAGE_SEQUENCE[0]);
@@ -84,6 +84,7 @@ describe("IngestionRepository", () => {
 
     const prepared = await repository.prepareJobForRetry(job.id);
     expect(prepared?.status).toBe("queued");
+    expect(prepared?.sources).toEqual(["transcripts"]);
     const stages = prepared?.stages ?? [];
 
     const downloadStage = stages.find((stage) => stage.name === INGESTION_STAGE_SEQUENCE[0]);
